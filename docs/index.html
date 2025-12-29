@@ -671,10 +671,19 @@
     }
   }
 
-  function maybeGunzip(u8) {
+  async function maybeGunzip(u8) {
     // gzip header 1f 8b
     if (u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b) {
-      return pako.ungzip(u8);
+      if (typeof DecompressionStream !== 'undefined') {
+        const ds = new DecompressionStream('gzip');
+        const stream = new Response(u8).body.pipeThrough(ds);
+        const buf = await new Response(stream).arrayBuffer();
+        return new Uint8Array(buf);
+      }
+      if (typeof pako !== 'undefined') {
+        return pako.ungzip(u8);
+      }
+      throw new Error('gzip not supported in this browser');
     }
     return u8;
   }
@@ -691,7 +700,7 @@
       try {
         const u8 = await fetchBytes('static-shards/' + rec.file, warpAbort ? warpAbort.signal : null);
         if (!u8 || u8.length === 0) return null;
-        const raw = maybeGunzip(u8);
+        const raw = await maybeGunzip(u8);
         if (warpAbort && warpAbort.signal.aborted) return null;
 
         const p = sqlite3.wasm.allocFromTypedArray(raw);
