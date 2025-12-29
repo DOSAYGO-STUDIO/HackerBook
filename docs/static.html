@@ -1,0 +1,1545 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta name="referrer" content="origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Static News - A Static Mirror of Hacker News Right in your Browser</title>
+  <link rel="icon" href="cd.png">
+  <link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
+  <style>
+    body { font-family: Verdana, Geneva, sans-serif; font-size: 10pt; color:#000; margin:0; }
+    a:link { color:#0000cc; text-decoration:none; }
+    a:visited { color:#828282; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    #hnmain { background:#f6f6ef; }
+    .topbar { background:#9a9a9a; } /* archive gray */
+    .pagetop { font-size:10pt; color:#000; }
+    .pagetop a { color:#000; }
+    .pagetop a:hover { text-decoration:none; }
+    .hnname a { font-weight:bold; }
+    .itemlist { width:100%; }
+    .title { font-size:10pt; }
+    .subtext { font-size:7pt; color:#828282; }
+    .subtext a { color:#828282; }
+    .rank { color:#828282; }
+    .spacer { height:5px; }
+    .morelink { color:#0000cc; }
+    .votelinks { width: 14px; }
+    .archive-dot {
+      width: 6px; height: 6px;
+      background: #9a9a9a;
+      border-radius: 50%;
+      display: inline-block;
+      margin-top: 4px;
+      opacity: 0.5;
+    }
+    .loading { color:#828282; font-style:italic; }
+    .hr { height:1px; background:#9a9a9a; margin:8px 0; }
+    .commtext {
+      font-size: 9pt;
+      line-height: 1.4;
+      max-width: 72ch;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      margin-right: 20px;
+      white-space: pre-wrap;
+    }
+    .commtext p { margin: 0 0 0.8em 0; }
+    .commtext p:last-child { margin-bottom: 0; }
+    .commtext a { color: #666; }
+    .commtext a:visited { color: #888; }
+    .commtext pre, .commtext code {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 8.5pt;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: #f0f0f0;
+      padding: 1px 3px;
+    }
+    .commtext pre {
+      display: block;
+      padding: 6px 8px;
+      margin: 0.5em 0;
+      overflow-x: auto;
+      white-space: pre;
+      max-width: none;
+    }
+    .comhead { font-size: 8pt; color: #828282; }
+    .comhead a { color: #828282; }
+    .comhead .hnuser { color: #828282; }
+    .error { color:#b00020; white-space:pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 9pt; }
+    .archive-badge {
+      background: #9a9a9a;
+      color: #fff;
+      font-size: 7pt;
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-weight: normal;
+    }
+    .archive-badge-link { text-decoration: none; display: flex; }
+    .archive-badge-link:hover { text-decoration: none; }
+    .status-cell {
+      width: 320px;
+      white-space: nowrap;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    #status-right, #status-mid {
+      color: #111;
+      font-size: 8pt;
+      display: inline-block;
+      width: 160px;
+      text-align: left;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    #status-mid { display: none; }
+    .header-date {
+      margin: 0 6px;
+      font-size: 7pt;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      color: #f6f6ef;
+    }
+    .thread-hidden { display: none; }
+    .togg {
+      color: #828282;
+      text-decoration: none;
+      margin-left: 4px;
+      font-size: 8pt;
+    }
+    .yclinks {
+      font-size: 8pt;
+      color: #828282;
+      text-align: center;
+      padding: 10px 0 20px 0;
+    }
+    .yclinks a { color: #828282; margin: 0 5px; }
+    .yclinks a:hover { text-decoration: none; }
+    .footer-info { text-align: right; margin-bottom: 6px; }
+    .record-table {
+      border-collapse: collapse;
+      width: 100%;
+      background: #f6f6ef;
+      border: 1px solid #9a9a9a;
+    }
+    .record-table td {
+      border: 1px solid #9a9a9a;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    .record-label {
+      width: 140px;
+      color: #828282;
+      font-size: 8pt;
+      background: #efefe3;
+    }
+    .archive-table {
+      border-collapse: collapse;
+      width: 100%;
+      background: #f6f6ef;
+      border: 1px solid #9a9a9a;
+    }
+    .archive-table th, .archive-table td {
+      border: 1px solid #9a9a9a;
+      padding: 6px 8px;
+      text-align: left;
+      font-size: 8pt;
+    }
+    .archive-table th {
+      background: #efefe3;
+      font-weight: bold;
+    }
+    .db-icon, .doc-icon {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 6px;
+      vertical-align: middle;
+      border: 1px solid #9a9a9a;
+      background: #d9d9d9;
+    }
+    .db-icon { border-radius: 2px; box-shadow: inset 0 -2px 0 #bdbdbd; }
+    .doc-icon { border-radius: 1px; background: #efefe3; }
+    .archive-chart {
+      width: 100%;
+      height: 220px;
+      background: #f6f6ef;
+      border: 1px solid #9a9a9a;
+      margin-top: 10px;
+    }
+    .warp-input {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 10pt;
+      border: 1px solid #828282;
+      padding: 2px;
+      text-align: right;
+    }
+    .warp-form {
+      text-align: center;
+      margin: 6px 0 12px 0;
+    }
+    .time-step {
+      font-family: Verdana, Geneva, sans-serif;
+      font-size: 10pt;
+      border: 1px solid #828282;
+      background: #f6f6ef;
+      color: #828282;
+      padding: 1px 6px;
+      margin: 0 4px;
+      cursor: pointer;
+    }
+    .logo-icon { width: 18px; height: 18px; image-rendering: pixelated; }
+    /* Mobile: smaller indents */
+    @media (max-width: 600px) {
+      .ind { transform: scaleX(0.5); transform-origin: left; }
+      .commtext { max-width: 100%; margin-right: 10px; }
+      #hnmain { width: 100% !important; }
+      #status-right { display: none; }
+      #status-mid { display: inline-block; }
+      .header-right { flex-direction: column; align-items: flex-end; }
+      .archive-badge { order: 1; }
+      .header-date { order: 2; display: block; margin: 4px 0 0 0; }
+    }
+  </style>
+
+</head>
+<body>
+<center>
+  <table id="hnmain" border="0" cellpadding="0" cellspacing="0" width="85%">
+    <tr>
+      <td class="topbar">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding:2px">
+          <tr>
+            <td style="width:18px;padding-right:4px; vertical-align:middle;">
+              <img src="cd.png" alt="" class="logo-icon" title="Archive">
+            </td>
+            <td style="line-height:12pt; height:10px; vertical-align:middle;">
+              <span class="pagetop">
+                <b class="hnname"><a href="?view=news" data-spa>Static News</a></b>
+                <a href="?view=newest" data-spa>new</a> |
+                <a href="?view=news" data-spa>front</a> |
+                <a href="?view=ask" data-spa>ask</a> |
+                <a href="?view=show" data-spa>show</a> |
+                <a href="?view=jobs" data-spa>jobs</a>
+                <span id="status-mid"></span>
+              </span>
+            </td>
+            <td class="status-cell" style="text-align:right;padding-right:6px; vertical-align:middle;">
+              <span class="header-right">
+                <span id="status-right" class="pagetop"></span>
+                <span id="header-date" class="pagetop header-date"></span>
+                <a class="archive-badge-link" href="?view=archive" data-spa><span class="archive-badge">ARCHIVE</span></a>
+              </span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr style="height:10px"></tr>
+
+    <tr>
+      <td>
+        <table border="0" cellpadding="0" cellspacing="0" class="itemlist" id="content-table">
+          <tr><td style="padding:14px" class="loading">Loading…</td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td><div class="hr"></div></td></tr>
+
+    <tr>
+      <td style="padding: 8px 10px;">
+        <div class="subtext footer-info">
+          You are looking at Hacker News on <span id="snapInfo">...</span>. All times are relative from then.
+        </div>
+        <div class="subtext footer-info" id="statsInfo"></div>
+      </td>
+    </tr>
+
+    <tr>
+      <td class="yclinks">
+        <a href="https://www.ycombinator.com">Y Combinator</a>|<a href="https://www.ycombinator.com/apply/">Apply</a>|<a href="https://www.ycombinator.com/companies/">Companies</a>|<a href="https://www.ycombinator.com/blog/">Blog</a>|<a href="https://news.ycombinator.com">Live HN</a>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <form class="warp-form" onsubmit="return false;">
+          <button class="time-step" type="button" data-step="-1">&lt;</button>
+          <input type="date" id="warp-date" class="warp-input" title="Jump to a specific date">
+          <button class="time-step" type="button" data-step="1">&gt;</button>
+        </form>
+      </td>
+    </tr>
+  </table>
+</center>
+
+<!-- Use the same sqlite wasm you already ship in primes -->
+<script src="jswasm/sqlite3.js"></script>
+<script src="vendor/uplot/uPlot.iife.min.js"></script>
+
+<script>
+(() => {
+  // -----------------------
+  // Config
+  // -----------------------
+  const PATHS = {
+    manifest: 'static-manifest.json?v=20251229',
+    archiveIndex: 'archive-index.json?v=20251229'
+  };
+
+  const ITEMS_PER_PAGE = 30;
+  const LIST_SHARDS_TO_SCAN = 1;        // soft-launch behavior until you add real frontpage snapshots
+  const SHARD_CACHE_LIMIT = 10;
+  const SCORE_SORT_HORIZON_DAYS = 1;
+  const COLLAPSE_STORE_KEY = 'staticNewsCollapsedV1';
+  const THREAD_CACHE_LIMIT = 1;
+  const COMMENT_FLUSH_CHARS = 70000;
+  const COMMENT_FLUSH_BATCH = 180;
+
+  // -----------------------
+  // State
+  // -----------------------
+  let sqlite3 = null;
+  let manifest = null;
+  let archiveIndex = null;
+  let timeShards = [];
+  let timeRange = { min: null, max: null };
+  let timeControlsBound = false;
+  let routeToken = 0;
+  let currentThreadId = null;
+  const threadCache = new Map();
+  let warpDebounce = null;
+  let warpAbort = null;
+  const shardInFlight = new Map();
+  const timeIndexBySid = new Map();
+
+  const statusRightEl = document.getElementById('status-right');
+  const statusMidEl = document.getElementById('status-mid');
+  const snapInfoEl = document.getElementById('snapInfo');
+  const headerDateEl = document.getElementById('header-date');
+  const statsInfoEl = document.getElementById('statsInfo');
+  const tableEl = document.getElementById('content-table');
+
+  // sid -> db
+  const shardCache = new Map();
+  const collapsedIds = new Set();
+
+  // -----------------------
+  // Utilities
+  // -----------------------
+  function setStatus(msg) {
+    const text = msg || '';
+    statusRightEl.textContent = text;
+    statusMidEl.textContent = text;
+  }
+
+  function qs() { return new URLSearchParams(location.search); }
+
+  function nav(params) {
+    const url = new URL(location.href);
+    for (const [k,v] of Object.entries(params)) {
+      if (v === null || v === undefined) url.searchParams.delete(k);
+      else url.searchParams.set(k, String(v));
+    }
+    if (!('warp' in params) && qs().get('warp')) url.searchParams.set('warp', qs().get('warp'));
+    if (!('warp_date' in params) && qs().get('warp_date')) url.searchParams.set('warp_date', qs().get('warp_date'));
+    history.pushState(params, '', url.toString());
+    route();
+  }
+
+  function cacheThread(id, html, resume = null) {
+    if (!id || !html) return;
+    if (threadCache.has(id)) threadCache.delete(id);
+    threadCache.set(id, { html, scrollY: window.scrollY || 0, cachedAt: Date.now(), resume });
+    while (threadCache.size > THREAD_CACHE_LIMIT) {
+      const oldest = threadCache.keys().next().value;
+      threadCache.delete(oldest);
+    }
+  }
+
+  function restoreThreadFromCache(id) {
+    const cached = threadCache.get(id);
+    if (!cached) return false;
+    tableEl.innerHTML = cached.html;
+    applyCollapseState();
+    requestAnimationFrame(() => {
+      window.scrollTo(0, cached.scrollY || 0);
+    });
+    setStatus('');
+    return true;
+  }
+
+  function saveResumeState(id, resume) {
+    if (!id) return;
+    const cached = threadCache.get(id);
+    if (cached) {
+      cached.resume = resume;
+    } else {
+      cacheThread(id, tableEl.innerHTML, resume);
+    }
+  }
+
+  function clearResumeStates() {
+    for (const entry of threadCache.values()) {
+      entry.resume = null;
+    }
+  }
+
+  function enableSPA() {
+    document.querySelectorAll('a[data-spa]').forEach(a => {
+      if (a.dataset.spaBound) return;
+      a.dataset.spaBound = '1';
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const u = new URL(a.href);
+        const cur = qs();
+        if (!u.searchParams.get('warp') && cur.get('warp')) u.searchParams.set('warp', cur.get('warp'));
+        if (!u.searchParams.get('warp_date') && cur.get('warp_date')) u.searchParams.set('warp_date', cur.get('warp_date'));
+        history.pushState({}, '', u.toString());
+        route();
+      });
+    });
+  }
+
+  function decodeEntities(s) {
+    if (!s) return '';
+    return String(s)
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  function fixFlatPreBlocks(html) {
+    if (!html || html.includes('\n')) return html;
+    return html.replace(/<pre><code>([\s\S]*?)<\/code><\/pre>/g, (m, body) => {
+      if (body.includes('\n')) return m;
+      const spaceRuns = body.match(/\s{2,}/g) || [];
+      if (spaceRuns.length < 2) return m;
+      let fixed = body.replace(/([^\n])(\s{2,})(?=\S)/g, (match, lead, spaces) => `${lead}\n${spaces}`);
+      fixed = fixed.replace(/\/\n(\s*)\\/g, (match, spaces) => `/ ${spaces}\\`);
+      fixed = fixed.replace(/\\\n(\s*)\//g, (match, spaces) => `\\${spaces}/`);
+      if (fixed.startsWith('\n')) fixed = fixed.slice(1);
+      return `<pre><code>${fixed}</code></pre>`;
+    });
+  }
+
+  function hostFromUrl(url) {
+    try { return new URL(url).host.replace(/^www\./,''); } catch { return ''; }
+  }
+
+  let currentReferenceTime = 0;
+
+  function timeAgoSnapshot(ts) {
+    const ref = currentReferenceTime
+      || manifest?.snapshot_time
+      || manifest?.shards?.reduce((m,s)=>Math.max(m, s.tmax||0), 0)
+      || Math.floor(Date.now()/1000);
+    if (!ts) return '';
+    const seconds = Math.max(0, ref - ts);
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 1) return `${seconds}s ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 1) return `${minutes} minutes ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 1) return `${hours} hours ago`;
+    const months = Math.floor(days / 30);
+    if (months < 1) return `${days} days ago`;
+    const years = Math.floor(days / 365);
+    if (years < 1) return `${months} months ago`;
+    return `${years} years ago`;
+  }
+
+  function formatAbsoluteTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.toLocaleString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  function toISODate(ts) {
+    return new Date(ts * 1000).toISOString().split('T')[0];
+  }
+
+  function parseISODateUTC(dateStr, endOfDay = false) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+    if (!m) return null;
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const d = Number(m[3]);
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+    const h = endOfDay ? 23 : 0;
+    const min = endOfDay ? 59 : 0;
+    const s = endOfDay ? 59 : 0;
+    return Math.floor(Date.UTC(y, mo, d, h, min, s) / 1000);
+  }
+
+  function formatISODateUTC(ts) {
+    const d = new Date(ts * 1000);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function findShardForTs(targetTs) {
+    const shards = manifest?.shards || [];
+    let targetShard = shards.find(s => s.tmin <= targetTs && s.tmax >= targetTs);
+    if (!targetShard && shards.length) {
+      targetShard = shards.reduce((best, s) => {
+        const dist = Math.min(Math.abs(s.tmin - targetTs), Math.abs(s.tmax - targetTs));
+        const bestDist = Math.min(Math.abs(best.tmin - targetTs), Math.abs(best.tmax - targetTs));
+        return dist < bestDist ? s : best;
+      }, shards[0]);
+    }
+    return targetShard;
+  }
+
+  function navigateToWarpDate(dateStr) {
+    if (!dateStr || !manifest) return;
+    if (warpAbort) warpAbort.abort();
+    warpAbort = new AbortController();
+    let targetTs = parseISODateUTC(dateStr, false);
+    if (!targetTs) return;
+    if (timeRange.min && targetTs < timeRange.min) targetTs = timeRange.min;
+    if (timeRange.max && targetTs > timeRange.max) targetTs = timeRange.max;
+    const targetShard = findShardForTs(targetTs);
+    if (targetShard) {
+      const current = qs().get('view') || 'news';
+      const view = ['news','newest','ask','show','jobs'].includes(current) ? current : 'news';
+      const iso = formatISODateUTC(targetTs);
+      nav({ view, warp: targetShard.sid, warp_date: iso });
+    }
+  }
+
+  function stepWarpDate(deltaDays) {
+    const warpInput = document.getElementById('warp-date');
+    const baseTs = warpInput?.value
+      ? parseISODateUTC(warpInput.value, false)
+      : (currentReferenceTime || manifest?.snapshot_time || Math.floor(Date.now()/1000));
+    if (!baseTs) return;
+    const nextTs = baseTs + deltaDays * 86400;
+    if (timeRange.min && nextTs < timeRange.min) {
+      alert("Sorry, this archive cannot yet infer the existence of HN before HN existed.");
+      return;
+    }
+    if (timeRange.max && nextTs > timeRange.max) {
+      alert("Sorry this archive can not yet see the future.");
+      return;
+    }
+    const next = formatISODateUTC(nextTs);
+    if (warpInput) warpInput.value = next;
+    navigateToWarpDate(next);
+  }
+
+  function formatExactRelative(ts, refTs) {
+    if (!ts || !refTs) return '';
+    let start = new Date(ts * 1000);
+    let end = new Date(refTs * 1000);
+    let suffix = 'ago';
+    if (end < start) {
+      [start, end] = [end, start];
+      suffix = 'from now';
+    }
+
+    const startUTC = new Date(Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth(),
+      start.getUTCDate(),
+      start.getUTCHours(),
+      start.getUTCMinutes(),
+      start.getUTCSeconds()
+    ));
+    const endUTC = new Date(Date.UTC(
+      end.getUTCFullYear(),
+      end.getUTCMonth(),
+      end.getUTCDate(),
+      end.getUTCHours(),
+      end.getUTCMinutes(),
+      end.getUTCSeconds()
+    ));
+
+    let years = endUTC.getUTCFullYear() - startUTC.getUTCFullYear();
+    let candidate = new Date(startUTC);
+    candidate.setUTCFullYear(startUTC.getUTCFullYear() + years);
+    if (candidate > endUTC) {
+      years -= 1;
+      candidate = new Date(startUTC);
+      candidate.setUTCFullYear(startUTC.getUTCFullYear() + years);
+    }
+
+    let months = endUTC.getUTCMonth() - candidate.getUTCMonth();
+    if (months < 0) months += 12;
+    candidate.setUTCMonth(candidate.getUTCMonth() + months);
+    if (candidate > endUTC) {
+      months -= 1;
+      candidate.setUTCMonth(candidate.getUTCMonth() - 1);
+    }
+
+    let remainingMs = endUTC.getTime() - candidate.getTime();
+    const days = Math.floor(remainingMs / 86400000);
+    remainingMs -= days * 86400000;
+    const hours = Math.floor(remainingMs / 3600000);
+    remainingMs -= hours * 3600000;
+    const minutes = Math.floor(remainingMs / 60000);
+    remainingMs -= minutes * 60000;
+    const seconds = Math.floor(remainingMs / 1000);
+
+    const parts = [
+      ['years', years],
+      ['months', months],
+      ['days', days],
+      ['hours', hours],
+      ['minutes', minutes],
+      ['seconds', seconds]
+    ].filter(([,val], idx, arr) => val !== 0 || arr.slice(idx + 1).some(([,v]) => v !== 0));
+    if (!parts.length) return `0 seconds ${suffix}`;
+    return `${parts.map(([label,val]) => `${val} ${label}`).join(', ')} ${suffix}`;
+  }
+
+  // -----------------------
+  // Manifest routing: id -> shard record (binary search)
+  // -----------------------
+  function shardRecForId(id) {
+    const x = Number(id);
+    const shards = manifest?.shards || [];
+    let lo = 0, hi = shards.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const s = shards[mid];
+      if (x < s.id_lo) hi = mid - 1;
+      else if (x > s.id_hi) lo = mid + 1;
+      else return s;
+    }
+    return null;
+  }
+
+  // -----------------------
+  // Shard loading (.sqlite or .sqlite.gz) + deserialize
+  // -----------------------
+  async function fetchBytes(url, signal = null) {
+    try {
+      const r = await fetch(url, { cache: 'force-cache', signal });
+      if (!r.ok) throw new Error(`fetch failed ${r.status}: ${url}`);
+      return new Uint8Array(await r.arrayBuffer());
+    } catch (err) {
+      if (err && err.name === 'AbortError') return new Uint8Array();
+      throw err;
+    }
+  }
+
+  function maybeGunzip(u8) {
+    // gzip header 1f 8b
+    if (u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b) {
+      return pako.ungzip(u8);
+    }
+    return u8;
+  }
+
+  async function loadShardBySid(sid) {
+    if (shardCache.has(sid)) return shardCache.get(sid);
+    if (shardInFlight.has(sid)) return shardInFlight.get(sid);
+
+    const rec = (manifest.shards || []).find(s => s.sid === sid);
+    if (!rec) throw new Error(`Unknown shard sid=${sid}`);
+
+    setStatus(`loading shard ${sid}…`);
+    const promise = (async () => {
+      try {
+        const u8 = await fetchBytes('static-shards/' + rec.file, warpAbort ? warpAbort.signal : null);
+        if (!u8 || u8.length === 0) return null;
+        const raw = maybeGunzip(u8);
+        if (warpAbort && warpAbort.signal.aborted) return null;
+
+        const p = sqlite3.wasm.allocFromTypedArray(raw);
+        const db = new sqlite3.oo1.DB();
+        sqlite3.capi.sqlite3_deserialize(
+          db.pointer, "main", p, raw.byteLength, raw.byteLength,
+          sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE
+        );
+
+        shardCache.set(sid, db);
+        // cache eviction
+        if (shardCache.size > SHARD_CACHE_LIMIT) {
+          const oldest = shardCache.keys().next().value;
+          try { shardCache.get(oldest).close(); } catch {}
+          shardCache.delete(oldest);
+        }
+
+        return db;
+      } finally {
+        shardInFlight.delete(sid);
+        setStatus('');
+      }
+    })();
+
+    shardInFlight.set(sid, promise);
+    return promise;
+  }
+
+  // -----------------------
+  // SQL helpers
+  // -----------------------
+  function sqlAll(db, sql, bind=[]) {
+    return db.exec({ sql, bind, rowMode:'object', returnValue:'resultRows' }) || [];
+  }
+  function sqlOne(db, sql, bind=[]) {
+    const rows = sqlAll(db, sql, bind);
+    return rows[0] || null;
+  }
+
+  // -----------------------
+  // List views (soft launch)
+  // -----------------------
+  function rebuildTimeIndex() {
+    const effMap = new Map((archiveIndex?.shards || []).map(s => [s.sid, s]));
+    timeShards = (manifest?.shards || []).map(s => {
+      const eff = effMap.get(s.sid);
+      return {
+        sid: s.sid,
+        tmin: eff?.tmin_eff || s.tmin_eff || s.tmin || 0,
+        tmax: eff?.tmax_eff || s.tmax_eff || s.tmax || 0
+      };
+    }).sort((a,b)=> (a.tmax||0) - (b.tmax||0) || (a.tmin||0) - (b.tmin||0));
+    timeIndexBySid.clear();
+    timeShards.forEach((s, i) => timeIndexBySid.set(s.sid, i));
+    if (timeShards.length) {
+      const minTs = timeShards[0].tmin || null;
+      const maxTs = timeShards[timeShards.length - 1].tmax || null;
+      timeRange.min = minTs ? parseISODateUTC(formatISODateUTC(minTs), false) : null;
+      timeRange.max = maxTs ? parseISODateUTC(formatISODateUTC(maxTs), true) : null;
+      const warpInput = document.getElementById('warp-date');
+      if (warpInput) {
+        if (timeRange.min) warpInput.min = toISODate(timeRange.min);
+        if (timeRange.max) warpInput.max = toISODate(timeRange.max);
+      }
+    }
+  }
+
+  function latestShardSids(n) {
+    const shards = timeShards || [];
+    return shards.slice(-n).map(s => s.sid).reverse();
+  }
+
+  async function listView(view, page, warpSid = null, warpDate = null, token = 0) {
+    const offset = (page - 1) * ITEMS_PER_PAGE;
+    const scoreSortViews = new Set(['news', 'ask', 'show', 'jobs']);
+    const isScoreSorted = scoreSortViews.has(view);
+
+    const referenceTime = warpDate
+      ? parseISODateUTC(warpDate, true)
+      : (warpSid !== null
+        ? ((timeIndexBySid.has(warpSid) ? timeShards[timeIndexBySid.get(warpSid)]?.tmax : null) || manifest.snapshot_time)
+        : manifest.snapshot_time);
+    const cutoff = referenceTime ? (referenceTime - SCORE_SORT_HORIZON_DAYS * 86400) : 0;
+
+    // If warped to a specific date, scan shards in the time window
+    // Otherwise use the shard index with a small radius
+    let sids;
+    if (warpDate && referenceTime) {
+      const inWindow = timeShards.filter(s => (s.tmax || 0) >= cutoff && (s.tmin || 0) <= referenceTime);
+      sids = inWindow.map(s => s.sid).reverse();
+    } else if (warpSid !== null) {
+      const radius = 4;
+      const idx = timeIndexBySid.has(warpSid) ? timeIndexBySid.get(warpSid) : -1;
+      const base = idx >= 0 ? idx : Math.max(0, timeShards.length - 1);
+      const lo = Math.max(0, base - radius);
+      const hi = Math.min(timeShards.length - 1, base + radius);
+      sids = [];
+      for (let i = hi; i >= lo; i--) sids.push(timeShards[i].sid);
+    } else {
+      sids = latestShardSids(LIST_SHARDS_TO_SCAN);
+    }
+
+    setStatus(`loading ${view}${warpSid !== null ? ' (warped)' : ''}…`);
+
+    let all = [];
+
+    for (const sid of sids) {
+      if (token && token !== routeToken) return;
+      const db = await loadShardBySid(sid);
+      if (!db) continue;
+
+      let where = `type='story'`;
+      let order = `ORDER BY time DESC`;
+
+      if (view === 'news') order = `ORDER BY score DESC, time DESC`;
+      if (view === 'newest') order = `ORDER BY time DESC`;
+      if (view === 'ask') where += ` AND (title LIKE 'Ask HN:%' OR title LIKE 'Ask HN %')`;
+      if (view === 'show') where += ` AND (title LIKE 'Show HN:%' OR title LIKE 'Show HN %')`;
+      if (view === 'jobs') where = `type='job'`;
+      if (isScoreSorted && cutoff) where += ` AND time >= ${cutoff}`;
+      if (warpDate && referenceTime) where += ` AND time <= ${referenceTime}`;
+      if (isScoreSorted && view !== 'news') order = `ORDER BY score DESC, time DESC`;
+
+      const rows = sqlAll(db, `
+        SELECT id,type,by,time,title,url,score
+        FROM items
+        WHERE ${where}
+        ${order}
+        LIMIT 250
+      `);
+
+      all.push(...rows);
+
+      if (all.length > offset + ITEMS_PER_PAGE + 300) break;
+    }
+
+    if (isScoreSorted) all.sort((a,b) => (b.score||0)-(a.score||0) || (b.time||0)-(a.time||0));
+    else all.sort((a,b) => (b.time||0)-(a.time||0));
+
+    const pageRows = all.slice(offset, offset + ITEMS_PER_PAGE);
+
+    // Get comment counts (direct children only - shows as "N+ comments")
+    const commentCounts = new Map();
+    const storyIds = pageRows.map(r => r.id);
+    for (const sid of sids) {
+      if (token && token !== routeToken) return;
+      const db = await loadShardBySid(sid);
+      if (!db) continue;
+      const ids = storyIds.join(',');
+      if (ids) {
+        const counts = sqlAll(db, `
+          SELECT parent_id, COUNT(*) as cnt FROM edges
+          WHERE parent_id IN (${ids})
+          GROUP BY parent_id
+        `);
+        for (const c of counts) {
+          commentCounts.set(c.parent_id, (commentCounts.get(c.parent_id) || 0) + c.cnt);
+        }
+      }
+    }
+
+    if (token && token !== routeToken) return;
+    renderList(pageRows, view, page, offset, commentCounts);
+
+    setStatus('');
+  }
+
+  function renderList(items, view, page, offset, commentCounts = new Map()) {
+    let html = '';
+    items.forEach((it, i) => {
+      const rank = offset + i + 1;
+      const title = decodeEntities(it.title || '[untitled]');
+      const url = it.url ? decodeEntities(it.url) : `?view=item&id=${it.id}`;
+      const site = it.url ? hostFromUrl(url) : '';
+      const points = (it.score == null) ? '' : `${it.score} points`;
+      const by = it.by || '';
+      const age = timeAgoSnapshot(it.time);
+      const cnt = commentCounts.get(it.id) || 0;
+      const comments = cnt > 0 ? `${cnt}+ comments` : 'discuss';
+
+      html += `
+        <tr class="athing" id="${it.id}">
+          <td align="right" valign="top" class="title"><span class="rank">${rank}.</span></td>
+          <td valign="top" class="votelinks"><center><div class="archive-dot"></div></center></td>
+          <td class="title">
+            <span class="titleline">
+              ${it.url
+                ? `<a href="${url}">${title}</a>`
+                : `<a href="?view=item&id=${it.id}" onclick="nav({view:'item',id:${it.id}});return false;">${title}</a>`}
+              ${site ? `<span class="sitebit comhead"> (<span class="sitestr">${site}</span>)</span>` : ``}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2"></td>
+          <td class="subtext">
+            <span class="subline">
+              ${points ? `<span class="score" id="score_${it.id}">${points}</span>` : ``}
+              ${by ? `by <span class="hnuser">${by}</span>` : ``}
+              ${age ? `<span class="age"><a href="?view=item&id=${it.id}" onclick="nav({view:'item',id:${it.id}});return false;">${age}</a></span>` : ``}
+              ${comments ? `| <a href="?view=item&id=${it.id}" onclick="nav({view:'item',id:${it.id}});return false;">${comments}</a>` : ``}
+            </span>
+          </td>
+        </tr>
+        <tr class="spacer"></tr>
+      `;
+    });
+
+    const hasMore = items.length === ITEMS_PER_PAGE;
+    if (hasMore) {
+      html += `
+        <tr class="morespace" style="height:10px"></tr>
+        <tr><td colspan="2"></td><td class="title">
+          <a href="?view=${view}&p=${page+1}" class="morelink" onclick="nav({view:'${view}',p:${page+1}});return false;">More</a>
+        </td></tr>
+      `;
+    }
+
+    tableEl.innerHTML = html || `<tr><td style="padding:14px" class="loading">No items.</td></tr>`;
+  }
+
+  // -----------------------
+  // Thread view using OG edges table
+  // -----------------------
+  async function fetchItem(id) {
+    const rec = shardRecForId(id);
+    if (!rec) return null;
+    const db = await loadShardBySid(rec.sid);
+    if (!db) return null;
+    return sqlOne(db, `SELECT * FROM items WHERE id=? LIMIT 1`, [Number(id)]);
+  }
+
+  async function fetchChildrenBatch(ids) {
+    // Group by shard sid and fetch in IN (...) batches
+    const bySid = new Map();
+    for (const id of ids) {
+      const rec = shardRecForId(id);
+      if (!rec) continue;
+      if (!bySid.has(rec.sid)) bySid.set(rec.sid, []);
+      bySid.get(rec.sid).push(Number(id));
+    }
+
+    const out = new Map();
+    for (const [sid, list] of bySid.entries()) {
+      const db = await loadShardBySid(sid);
+      if (!db) continue;
+      const placeholders = list.map(()=>'?').join(',');
+      const rows = sqlAll(db, `SELECT * FROM items WHERE id IN (${placeholders})`, list);
+      for (const r of rows) out.set(r.id, r);
+    }
+    return out;
+  }
+
+  async function childIdsForParent(parentId) {
+    const rec = shardRecForId(parentId);
+    if (!rec) return [];
+    const db = await loadShardBySid(rec.sid);
+    if (!db) return [];
+    const rows = sqlAll(db, `
+      SELECT child_id FROM edges
+      WHERE parent_id=?
+      ORDER BY ord ASC
+    `, [Number(parentId)]);
+    return rows.map(r => Number(r.child_id)).filter(Number.isFinite);
+  }
+
+  function renderThreadSkeleton(root) {
+    const title = decodeEntities(root.title || '[untitled]');
+    const url = root.url ? decodeEntities(root.url) : '';
+    const by = root.by || '';
+    const age = timeAgoSnapshot(root.time);
+    const points = (root.score == null) ? '' : `${root.score} points`;
+    const site = url ? hostFromUrl(url) : '';
+
+    tableEl.innerHTML = `
+      <tr id="bigbox"><td>
+        <table class="fatitem" border="0">
+          <tr class="athing submission" id="${root.id}">
+            <td align="right" valign="top" class="title"><span class="rank"></span></td>
+            <td valign="top" class="votelinks"><center><div class="archive-dot"></div></center></td>
+            <td class="title">
+              <span class="titleline">
+                ${url ? `<a href="${url}">${title}</a>` : `<a href="#" onclick="return false;">${title}</a>`}
+                ${site ? `<span class="sitebit comhead"> (${site})</span>` : ``}
+              </span>
+            </td>
+          </tr>
+          <tr><td colspan="2"></td>
+            <td class="subtext">
+              <span class="subline">
+                ${points ? `<span class="score">${points}</span>` : ``}
+                ${by ? `by <span class="hnuser">${by}</span>` : ``}
+                ${age ? `<span class="age">${age}</span>` : ``}
+              </span>
+            </td>
+          </tr>
+          ${root.text ? `<tr><td colspan="2"></td><td><div class="commtext">${decodeEntities(root.text)}</div></td></tr>` : ``}
+        </table>
+        <div class="hr"></div>
+        <div id="comments-root" class="loading" style="padding:8px">Loading comments…</div>
+      </td></tr>
+    `;
+  }
+
+  function commentRowHtml(c, indent) {
+    const by = c.by || '';
+    const age = timeAgoSnapshot(c.time);
+    const text = c.text ? fixFlatPreBlocks(decodeEntities(c.text)) : '';
+    const pad = indent * 40;
+
+    return `
+      <tr class="athing comtr" id="${c.id}" data-id="${c.id}" data-depth="${indent}">
+        <td>
+          <table border="0">
+            <tr>
+              <td class="ind" style="width:${pad}px"></td>
+              <td valign="top" class="votelinks"><center><div class="archive-dot"></div></center></td>
+              <td class="default">
+                <div style="margin-top:2px; margin-bottom:-10px;">
+                  <span class="comhead">
+                    ${by ? `<span class="hnuser">${by}</span>` : ``}
+                    ${age ? `<span class="age"><a href="?view=comment&id=${c.id}" onclick="nav({view:'comment',id:${c.id}});return false;">${age}</a></span>` : ``}
+                    <a class="togg" href="#" data-toggle-id="${c.id}" onclick="toggleThread(${c.id});return false;">[–]</a>
+                  </span>
+                </div><br>
+                <div class="comment"><div class="commtext">${text || `<span class="loading">[deleted]</span>`}</div></div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    `;
+  }
+
+  async function renderThread(id, token = 0) {
+    currentThreadId = id;
+    const cached = threadCache.get(id);
+    const resuming = !!(cached && cached.resume && !cached.resume.done);
+    if (resuming) {
+      restoreThreadFromCache(id);
+    } else if (restoreThreadFromCache(id)) {
+      return;
+    }
+    if (!resuming) {
+      setStatus('Loading item…');
+      const root = await fetchItem(id);
+      if (token && token !== routeToken) return;
+
+      if (!root) {
+        tableEl.innerHTML = `<tr><td style="padding:14px" class="loading">Item not found.</td></tr>`;
+        setStatus('');
+        return;
+      }
+
+      renderThreadSkeleton(root);
+    }
+
+    const commentsRoot = document.getElementById('comments-root');
+    if (!commentsRoot) return;
+    if (!resuming) {
+      commentsRoot.textContent = 'Loading comments…';
+    }
+    setStatus('Loading comments…');
+
+    const resumeState = resuming ? cached.resume : null;
+    const seen = resumeState ? resumeState.seen : new Set();
+    let html = resumeState ? resumeState.html : '';
+    let pending = resumeState ? resumeState.pending : '';
+    let processed = resumeState ? resumeState.processed : 0;
+    const stack = resumeState ? resumeState.stack : [{ parentId: Number(id), indent: 0, kids: null, idx: 0, map: null }];
+
+    async function flushPending() {
+      if (!pending) return;
+      await new Promise(r => requestAnimationFrame(() => r()));
+      if (token && token !== routeToken) return;
+      commentsRoot.classList.remove('loading');
+      commentsRoot.innerHTML = `<table border="0" cellpadding="0" cellspacing="0" width="100%">${html}${pending}</table>`;
+      html += pending;
+      pending = '';
+    }
+
+    while (stack.length) {
+      if (token && token !== routeToken) {
+        saveResumeState(id, { stack, seen, html, pending, processed, done: false });
+        return;
+      }
+      const frame = stack[stack.length - 1];
+      if (!frame.kids) {
+        const kids = await childIdsForParent(frame.parentId);
+        if (token && token !== routeToken) {
+          saveResumeState(id, { stack, seen, html, pending, processed, done: false });
+          return;
+        }
+        if (!kids.length) {
+          stack.pop();
+          continue;
+        }
+        const batch = kids.filter(x => !seen.has(x));
+        batch.forEach(x => seen.add(x));
+        if (!batch.length) {
+          stack.pop();
+          continue;
+        }
+        const map = await fetchChildrenBatch(batch);
+        if (token && token !== routeToken) {
+          saveResumeState(id, { stack, seen, html, pending, processed, done: false });
+          return;
+        }
+        frame.kids = kids;
+        frame.map = map;
+        frame.idx = 0;
+      }
+
+      if (frame.idx >= frame.kids.length) {
+        stack.pop();
+        continue;
+      }
+
+      const cid = frame.kids[frame.idx++];
+      const c = frame.map.get(cid);
+      if (c) {
+        pending += commentRowHtml(c, frame.indent);
+        processed++;
+        if (pending.length > COMMENT_FLUSH_CHARS || processed % COMMENT_FLUSH_BATCH === 0) {
+          await flushPending();
+          if (token && token !== routeToken) {
+            saveResumeState(id, { stack, seen, html, pending, processed, done: false });
+            return;
+          }
+        }
+      }
+      stack.push({ parentId: cid, indent: frame.indent + 1, kids: null, idx: 0, map: null });
+    }
+    if (token && token !== routeToken) return;
+
+    commentsRoot.classList.remove('loading');
+    commentsRoot.innerHTML = (html + pending)
+      ? `<table border="0" cellpadding="0" cellspacing="0" width="100%">${html}${pending}</table>`
+      : `<div class="subtext" style="padding:8px">No comments.</div>`;
+
+    applyCollapseState();
+    setStatus('');
+    cacheThread(id, tableEl.innerHTML, null);
+  }
+
+  // -----------------------
+  // Comment archive view
+  // -----------------------
+  async function renderCommentView(id, token = 0) {
+    setStatus('Loading comment…');
+    const item = await fetchItem(id);
+    if (token && token !== routeToken) return;
+
+    if (!item) {
+      tableEl.innerHTML = `<tr><td style="padding:14px" class="loading">Item not found.</td></tr>`;
+      setStatus('');
+      return;
+    }
+
+    const title = decodeEntities(item.title || '[comment]');
+    const text = item.text ? fixFlatPreBlocks(decodeEntities(item.text)) : '';
+    const by = item.by || '';
+    const score = item.score != null ? Number(item.score) : null;
+    const absTime = formatAbsoluteTime(item.time);
+    const relTime = timeAgoSnapshot(item.time);
+    const parent = item.parent ? Number(item.parent) : null;
+
+    const warpRelative = formatExactRelative(item.time, currentReferenceTime || manifest?.snapshot_time || Math.floor(Date.now()/1000));
+    const nowRelative = formatExactRelative(item.time, Math.floor(Date.now() / 1000));
+
+    tableEl.innerHTML = `
+      <tr><td style="padding:10px">
+        <div class="subtext">Archive record</div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <table class="record-table">
+          <tr><td class="record-label">ID</td><td class="title">${item.id}</td></tr>
+          ${item.type ? `<tr><td class="record-label">Type</td><td class="title">${item.type}</td></tr>` : ``}
+          ${by ? `<tr><td class="record-label">Author</td><td class="title">${by}</td></tr>` : ``}
+          ${score != null ? `<tr><td class="record-label">Score</td><td class="title">${score}</td></tr>` : ``}
+          ${relTime ? `<tr><td class="record-label">Relative (simple)</td><td class="title">${relTime}</td></tr>` : ``}
+          ${warpRelative ? `<tr><td class="record-label">Relative (warp)</td><td class="title">${warpRelative}</td></tr>` : ``}
+          ${nowRelative ? `<tr><td class="record-label">Relative (now)</td><td class="title">${nowRelative}</td></tr>` : ``}
+          ${absTime ? `<tr><td class="record-label">Time</td><td class="title">${absTime}</td></tr>` : ``}
+          ${parent ? `<tr><td class="record-label">Parent</td><td class="title"><a href="?view=item&id=${parent}" onclick="nav({view:'item',id:${parent}});return false;">${parent}</a></td></tr>` : ``}
+          <tr><td class="record-label">Text</td><td>${text ? `<div class="commtext">${text}</div>` : `<span class="loading">[deleted]</span>`}</td></tr>
+        </table>
+      </td></tr>
+    `;
+
+    setStatus('');
+  }
+
+  // -----------------------
+  // Thread collapsing
+  // -----------------------
+  function loadCollapsedState() {
+    try {
+      const raw = localStorage.getItem(COLLAPSE_STORE_KEY);
+      if (!raw) return;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) arr.forEach(id => collapsedIds.add(Number(id)));
+    } catch {}
+  }
+
+  function persistCollapsedState() {
+    try {
+      const arr = Array.from(collapsedIds.values());
+      localStorage.setItem(COLLAPSE_STORE_KEY, JSON.stringify(arr));
+    } catch {}
+  }
+
+  function applyCollapseState() {
+    const rows = Array.from(document.querySelectorAll('tr.athing.comtr'));
+    let collapsedStack = [];
+
+    for (const row of rows) {
+      const depth = Number(row.dataset.depth || 0);
+      const id = Number(row.dataset.id);
+
+      while (collapsedStack.length && depth <= collapsedStack[collapsedStack.length - 1].depth) {
+        collapsedStack.pop();
+      }
+
+      const isHidden = collapsedStack.length > 0;
+      row.classList.toggle('thread-hidden', isHidden);
+
+      if (collapsedIds.has(id)) {
+        collapsedStack.push({ id, depth });
+      }
+    }
+
+    document.querySelectorAll('[data-toggle-id]').forEach(el => {
+      const id = Number(el.getAttribute('data-toggle-id'));
+      el.textContent = collapsedIds.has(id) ? '[+]' : '[–]';
+    });
+  }
+
+  function toggleThread(id) {
+    const num = Number(id);
+    if (collapsedIds.has(num)) collapsedIds.delete(num);
+    else collapsedIds.add(num);
+    persistCollapsedState();
+    applyCollapseState();
+  }
+
+  // -----------------------
+  // Archive view
+  // -----------------------
+  async function loadArchiveIndex() {
+    if (archiveIndex) return archiveIndex;
+    archiveIndex = await fetch(PATHS.archiveIndex, { cache: 'force-cache' }).then(r => r.json());
+    return archiveIndex;
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes)) return '';
+    const gb = bytes / (1024 ** 3);
+    if (gb >= 1) return `${gb.toFixed(1)} GB`;
+    const mb = bytes / (1024 ** 2);
+    if (mb >= 1) return `${mb.toFixed(1)} MB`;
+    const kb = bytes / 1024;
+    return `${kb.toFixed(0)} KB`;
+  }
+
+  function formatDateShort(ts) {
+    if (!ts) return '';
+    return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function setupArchiveChart(shards) {
+    const target = document.getElementById('activity-chart');
+    if (!target || !window.uPlot || !shards.length) return;
+
+    const points = shards.map(s => {
+      const x = s.tmax_eff || s.tmax || s.tmin || 0;
+      const tmin = s.tmin_eff || s.tmin || 0;
+      const tmax = s.tmax_eff || s.tmax || 0;
+      if (!x || !tmin || !tmax) return null;
+      const spanDays = Math.max(1, Math.round((tmax - tmin) / 86400));
+      return { x, y: (s.count || 0) / spanDays };
+    }).filter(Boolean);
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    if (!xs.length) return;
+
+    function wheelZoomPlugin({ factor = 0.75 } = {}) {
+      return {
+        hooks: {
+          ready: u => {
+            u.root.addEventListener('wheel', e => {
+              e.preventDefault();
+              const rect = u.root.getBoundingClientRect();
+              const left = e.clientX - rect.left;
+              const xVal = u.posToVal(left, 'x');
+              const { min, max } = u.scales.x;
+              const range = max - min;
+              const zoom = e.deltaY < 0 ? factor : 1 / factor;
+              const newRange = range * zoom;
+              const pct = (xVal - min) / range;
+              const newMin = xVal - newRange * pct;
+              const newMax = xVal + newRange * (1 - pct);
+              u.setScale('x', { min: newMin, max: newMax });
+            }, { passive: false });
+          }
+        }
+      };
+    }
+
+    function dragPanPlugin() {
+      let dragging = false;
+      let startX = 0;
+      let startMin = 0;
+      let startMax = 0;
+      return {
+        hooks: {
+          ready: u => {
+            u.root.addEventListener('mousedown', e => {
+              dragging = true;
+              startX = e.clientX;
+              startMin = u.scales.x.min;
+              startMax = u.scales.x.max;
+            });
+            window.addEventListener('mousemove', e => {
+              if (!dragging) return;
+              const dx = e.clientX - startX;
+              const range = startMax - startMin;
+              const px = u.bbox.width;
+              const shift = range * (dx / px);
+              u.setScale('x', { min: startMin - shift, max: startMax - shift });
+            });
+            window.addEventListener('mouseup', () => { dragging = false; });
+          }
+        }
+      };
+    }
+
+    const data = [xs, ys];
+    const opts = {
+      width: target.clientWidth || 640,
+      height: 220,
+      scales: { x: { time: true } },
+      series: [
+        {},
+        { label: 'Items', stroke: '#0000cc', width: 1 }
+      ],
+      axes: [
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' } },
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' } }
+      ],
+      plugins: [wheelZoomPlugin(), dragPanPlugin()]
+    };
+
+    new uPlot(opts, data, target);
+  }
+
+  async function renderArchiveView(token = 0) {
+    setStatus('Loading archive…');
+    const data = await loadArchiveIndex();
+    if (token && token !== routeToken) return;
+
+    const shards = (data.shards || []).slice().sort((a,b) => a.sid - b.sid);
+    const manifestRows = (data.manifests || []).map(m => `
+      <tr>
+        <td><span class="doc-icon"></span><a href="${m.file}">${m.file}</a></td>
+        <td>${formatBytes(m.bytes)}</td>
+        <td>${m.note || ''}</td>
+      </tr>
+    `).join('');
+
+    tableEl.innerHTML = `
+      <tr><td style="padding:10px">
+        <div class="subtext">Archive view</div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <table class="record-table">
+          <tr><td class="record-label">Snapshot</td><td>${formatAbsoluteTime(data.snapshot_time)}</td></tr>
+          <tr><td class="record-label">Shards</td><td>${(data.totals?.shards || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Items</td><td>${(data.totals?.items || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Posts</td><td>${(data.totals?.posts || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Comments</td><td>${(data.totals?.comments || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Size</td><td>${formatBytes(data.totals?.bytes || 0)}</td></tr>
+        </table>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">Manifest files</div>
+        <table class="archive-table">
+          <tr><th>File</th><th>Size</th><th>Notes</th></tr>
+          ${manifestRows || ''}
+        </table>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">Shard index</div>
+        <table class="archive-table">
+          <tr><th>Shard</th><th>Start</th><th>End</th><th>Days</th><th>Posts</th><th>Comments</th><th>Items</th><th>Size</th></tr>
+          <tbody id="archive-shard-body"></tbody>
+        </table>
+      </td></tr>
+      <tr><td style="padding:0 10px 16px 10px">
+        <div class="subtext" style="margin-bottom:6px">HN activity over time</div>
+        <div id="activity-chart" class="archive-chart"></div>
+      </td></tr>
+    `;
+
+    const shardBody = document.getElementById('archive-shard-body');
+    if (shardBody && shards.length) {
+      const chunkSize = 200;
+      let idx = 0;
+      while (idx < shards.length) {
+        const chunk = shards.slice(idx, idx + chunkSize);
+        const html = chunk.map(s => {
+          const tmin = s.tmin_eff || s.tmin;
+          const tmax = s.tmax_eff || s.tmax;
+          const start = formatDateShort(tmin);
+          const end = formatDateShort(tmax);
+          const spanDays = (tmin && tmax) ? Math.max(1, Math.round((tmax - tmin) / 86400)) : '';
+          return `
+            <tr>
+              <td><span class="db-icon"></span><a href="static-shards/${s.file}">${s.file}</a></td>
+              <td>${start}</td>
+              <td>${end}</td>
+              <td>${spanDays}</td>
+              <td>${(s.posts || 0).toLocaleString('en-US')}</td>
+              <td>${(s.comments || 0).toLocaleString('en-US')}</td>
+              <td>${(s.count || 0).toLocaleString('en-US')}</td>
+              <td>${formatBytes(s.bytes)}</td>
+            </tr>
+          `;
+        }).join('');
+        shardBody.insertAdjacentHTML('beforeend', html);
+        idx += chunkSize;
+        if (idx < shards.length) {
+          await new Promise(r => requestAnimationFrame(() => r()));
+          if (token && token !== routeToken) return;
+        }
+      }
+    }
+
+    requestAnimationFrame(() => setupArchiveChart(shards));
+    setStatus('');
+  }
+
+  // -----------------------
+  // Router
+  // -----------------------
+  async function route() {
+    enableSPA();
+    const token = ++routeToken;
+
+    const p = qs();
+    const view = p.get('view') || 'news';
+    const page = Math.max(1, parseInt(p.get('p') || '1', 10));
+    const id = p.get('id');
+    const warp = p.get('warp') ? parseInt(p.get('warp'), 10) : null;
+    const warpDate = p.get('warp_date');
+    currentReferenceTime = warpDate
+      ? parseISODateUTC(warpDate, true)
+      : (manifest?.snapshot_time || 0);
+
+    if (currentReferenceTime) {
+      const d = new Date(currentReferenceTime * 1000);
+      const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      snapInfoEl.textContent = label;
+      headerDateEl.textContent = label;
+    }
+    if (warpDate) {
+      const warpInput = document.getElementById('warp-date');
+      if (warpInput) warpInput.value = warpDate;
+    }
+
+    if (view === 'item' && id) {
+      currentThreadId = Number(id);
+      await renderThread(Number(id), token);
+      return;
+    }
+
+    if (view === 'comment' && id) {
+      currentThreadId = null;
+      clearResumeStates();
+      await renderCommentView(Number(id), token);
+      return;
+    }
+
+    if (view === 'archive') {
+      currentThreadId = null;
+      clearResumeStates();
+      await renderArchiveView(token);
+      if (token !== routeToken) return;
+      history.replaceState({}, '', location.href);
+      return;
+    }
+
+    if (['news','newest','ask','show','jobs'].includes(view)) {
+      currentThreadId = null;
+      clearResumeStates();
+      await listView(view, page, warp, warpDate, token);
+      return;
+    }
+
+    nav({ view:'news', p:1 });
+  }
+
+  // -----------------------
+  // Boot
+  // -----------------------
+  async function init() {
+    try {
+      setStatus('Loading manifest…');
+      manifest = await fetch(PATHS.manifest, { cache:'force-cache' }).then(r => r.json());
+
+      // Ensure shards sorted by id_lo for binary search correctness
+      manifest.shards = (manifest.shards || []).slice().sort((a,b)=>a.id_lo-b.id_lo);
+      try {
+        archiveIndex = await fetch(PATHS.archiveIndex, { cache: 'force-cache' }).then(r => r.json());
+      } catch {}
+      rebuildTimeIndex();
+
+      // Derive snapshot_time if not present (OG manifest has it; but be safe)
+      if (!manifest.snapshot_time) {
+        manifest.snapshot_time = (manifest.shards || []).reduce((m,s)=>Math.max(m, s.tmax||0), 0);
+      }
+      if (manifest.snapshot_time) {
+        // Set warp input max to snapshot date
+        const warpInput = document.getElementById('warp-date');
+        const snapIso = formatISODateUTC(manifest.snapshot_time);
+        warpInput.max = snapIso;
+        warpInput.value = snapIso;
+
+        const totalItems = (manifest.shards || []).reduce((m, s) => m + (s.count || 0), 0);
+        const totalBytes = (manifest.shards || []).reduce((m, s) => m + (s.bytes || 0), 0);
+        const tmin = (manifest.shards || []).reduce((m, s) => Math.min(m, s.tmin || m), Number.POSITIVE_INFINITY);
+        const tmax = (manifest.shards || []).reduce((m, s) => Math.max(m, s.tmax || 0), 0);
+        if (Number.isFinite(tmin) && tmax) {
+          const start = new Date(tmin * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const end = new Date(tmax * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const gb = (totalBytes / (1024 ** 3)).toFixed(1);
+          statsInfoEl.textContent = `${totalItems.toLocaleString('en-US')} items, ${manifest.shards.length.toLocaleString('en-US')} shards, ${gb}GB, spanning ${start} to ${end}`;
+        }
+
+      if (!timeControlsBound) {
+        timeControlsBound = true;
+        // Warp handler - find stories from that date
+        warpInput.addEventListener('change', () => {
+          if (warpDebounce) clearTimeout(warpDebounce);
+          warpDebounce = setTimeout(() => {
+            navigateToWarpDate(warpInput.value);
+          }, 350);
+        });
+        document.querySelectorAll('.time-step').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const delta = parseInt(btn.getAttribute('data-step') || '0', 10);
+            if (delta) stepWarpDate(delta);
+          });
+        });
+      }
+    }
+
+      sqlite3 = await window.sqlite3InitModule();
+      loadCollapsedState();
+
+      window.addEventListener('popstate', () => route());
+      await route();
+    } catch (e) {
+      tableEl.innerHTML = `<tr><td style="padding:14px"><div class="error">${String(e && e.stack ? e.stack : e)}</div></td></tr>`;
+      setStatus('');
+    }
+  }
+
+  // expose nav for onclick handlers
+  window.nav = nav;
+  window.toggleThread = toggleThread;
+  window.addEventListener('scroll', () => {
+    if (!currentThreadId || !threadCache.has(currentThreadId)) return;
+    const cached = threadCache.get(currentThreadId);
+    cached.scrollY = window.scrollY || 0;
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
