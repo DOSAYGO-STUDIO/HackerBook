@@ -7,13 +7,25 @@
   <link rel="icon" href="cd.png">
   <link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
   <style>
-    body { font-family: Verdana, Geneva, sans-serif; font-size: 10pt; color:#000; margin:0; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body { font-family: Verdana, Geneva, sans-serif; font-size: 10pt; color:#000; margin:0; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     a:link { color:#0000cc; text-decoration:none; }
     a:visited { color:#828282; text-decoration:none; }
+    .morelink:visited { color:#0000cc; }
     a:hover { text-decoration:underline; }
     #hnmain { background:#f6f6ef; }
     .topbar { background:#9a9a9a; } /* archive gray */
     .pagetop { font-size:10pt; color:#000; }
+    .nav-cell {
+      vertical-align: middle;
+      height: 100%;
+      min-height: 28px;
+    }
+    .nav-wrap {
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
     .pagetop a { color:#000; }
     .pagetop a:hover { text-decoration:none; }
     .hnname a { font-weight:bold; }
@@ -88,14 +100,23 @@
       justify-content: flex-end;
       gap: 6px;
     }
+    .date-row {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 2px;
+      width: 100%;
+    }
     #status-right, #status-mid {
       color: #111;
       font-size: 8pt;
       display: inline-block;
       width: 160px;
-      text-align: left;
-      margin-left: 6px;
+      text-align: right;
+      margin-left: 0;
+      margin-right: 2px;
       vertical-align: middle;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
     }
     #status-mid { display: none; }
     .header-date {
@@ -119,7 +140,9 @@
     }
     .yclinks a { color: #828282; margin: 0 5px; }
     .yclinks a:hover { text-decoration: none; }
-    .footer-info { text-align: right; margin-bottom: 6px; }
+    .footer-info { text-align: center; margin-bottom: 6px; }
+    .stealth-link { color: inherit; text-decoration: none; cursor: pointer; }
+    .stealth-link:hover { text-decoration: none; }
     .record-table {
       border-collapse: collapse;
       width: 100%;
@@ -170,6 +193,7 @@
       background: #f6f6ef;
       border: 1px solid #9a9a9a;
       margin-top: 10px;
+      margin-bottom: 16px;
     }
     .warp-input {
       font-family: ui-monospace, Menlo, Consolas, monospace;
@@ -203,17 +227,53 @@
       margin: 0 4px;
       cursor: pointer;
     }
-    .logo-icon { width: 18px; height: 18px; image-rendering: pixelated; }
+    .logo-box {
+      width: 20px;
+      height: 20px;
+      border: 1px solid #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    .logo-icon { width: 16px; height: 16px; image-rendering: pixelated; }
+    @media (max-width: 1200px) {
+      .status-cell { width: auto; white-space: normal; }
+      .header-right {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto auto;
+        justify-items: end;
+        row-gap: 4px;
+        column-gap: 8px;
+      }
+      .date-row { display: contents; }
+      .header-date { grid-row: 1; grid-column: 1 / -1; margin: 0; }
+      .warp-form.top { grid-row: 2; grid-column: 1 / -1; }
+      .archive-badge-link { grid-row: 3; grid-column: 2; }
+      #status-right { grid-row: 3; grid-column: 1; justify-self: end; margin-right: 2px; }
+    }
     /* Mobile: smaller indents */
     @media (max-width: 600px) {
+      body { font-size: 12px; }
+      .pagetop, .title { font-size: 12px; line-height: 1.4; }
+      .subtext, .comhead { font-size: 10px; line-height: 1.3; }
+      .commtext { font-size: 12px; line-height: 1.5; }
       .ind { transform: scaleX(0.5); transform-origin: left; }
       .commtext { max-width: 100%; margin-right: 10px; }
       #hnmain { width: 100% !important; }
       #status-right { display: none; }
       #status-mid { display: inline-block; }
-      .header-right { flex-direction: column; align-items: flex-end; }
-      .archive-badge { order: 1; }
-      .header-date { order: 2; display: block; margin: 4px 0 0 0; }
+      .status-cell { width: auto; }
+      .header-right { flex-direction: column; align-items: flex-end; gap: 4px; }
+      .header-date { order: 1; display: block; margin: 0; }
+      .warp-form.top { order: 2; }
+      .archive-badge-link { order: 3; }
+      .archive-badge { order: 3; }
+      .warp-input, .time-step { font-size: 16px; }
+      .warp-input.top { width: 140px; }
+      .footer-info { text-align: center; font-size: 10px; }
+      .yclinks { font-size: 10px; padding-bottom: 12px; }
     }
   </style>
 
@@ -226,29 +286,33 @@
         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding:2px">
           <tr>
             <td style="width:18px;padding-right:4px; vertical-align:middle;">
-              <img src="cd.png" alt="" class="logo-icon" title="Archive">
+              <a href="#" id="logo-link" title="Seize the random day" onclick="return false;"><span class="logo-box"><img src="cd.png" alt="" class="logo-icon" title="Archive"></span></a>
             </td>
-            <td style="line-height:12pt; height:10px; vertical-align:middle;">
-              <span class="pagetop">
-                <b class="hnname"><a href="?view=news" data-spa>Static News</a></b>
-                <a href="?view=newest" data-spa>new</a> |
-                <a href="?view=news" data-spa>front</a> |
-                <a href="?view=ask" data-spa>ask</a> |
-                <a href="?view=show" data-spa>show</a> |
-                <a href="?view=jobs" data-spa>jobs</a>
-                <span id="status-mid"></span>
-              </span>
+            <td class="nav-cell">
+              <div class="nav-wrap">
+                <span class="pagetop">
+                  <b class="hnname"><a href="?view=news" data-spa id="home-link" title="Go to the most recent snapshot">Static News</a></b>
+                  <a href="?view=newest" data-spa>new</a> |
+                  <a href="?view=news" data-spa>front</a> |
+                  <a href="?view=ask" data-spa>ask</a> |
+                  <a href="?view=show" data-spa>show</a> |
+                  <a href="?view=jobs" data-spa>jobs</a>
+                  <span id="status-mid"></span>
+                </span>
+              </div>
             </td>
             <td class="status-cell" style="text-align:right;padding-right:6px; vertical-align:middle;">
               <span class="header-right">
-                <span id="status-right" class="pagetop"></span>
-                <span id="header-date" class="pagetop header-date"></span>
+                <span class="date-row">
+                  <span id="status-right" class="pagetop"></span>
+                  <span id="header-date" class="pagetop header-date">Someday, Month 00, 0000</span>
+                </span>
                 <form class="warp-form top" onsubmit="return false;">
-                  <button class="time-step" type="button" data-step="-1">&lt;</button>
-                  <input type="date" id="warp-date-top" class="warp-input top warp-date" title="Jump to a specific date">
-                  <button class="time-step" type="button" data-step="1">&gt;</button>
+                  <button class="time-step" type="button" data-step="-1" title="Back 1 day">&lt;</button>
+                  <input type="date" id="warp-date-top" class="warp-input top warp-date" title="Choose your day">
+                  <button class="time-step" type="button" data-step="1" title="Forward 1 day">&gt;</button>
                 </form>
-                <a class="archive-badge-link" href="?view=archive" data-spa><span class="archive-badge">ARCHIVE</span></a>
+                <a class="archive-badge-link" href="?view=archive" data-spa title="Archive Stats and Graph"><span class="archive-badge">ARCHIVE</span></a>
               </span>
             </td>
           </tr>
@@ -269,16 +333,6 @@
     <tr><td><div class="hr"></div></td></tr>
 
     <tr>
-      <td style="padding: 8px 10px;">
-        <div class="subtext footer-info">
-          You are looking at Hacker News on <span id="snapInfo">...</span>. All times are relative from then.
-        </div>
-        <div class="subtext footer-info" id="statsInfo"></div>
-        <div class="subtext footer-info">Made by DOSAYGO</div>
-      </td>
-    </tr>
-
-    <tr>
       <td class="yclinks">
         <a href="https://www.ycombinator.com">Y Combinator</a>|<a href="https://www.ycombinator.com/apply/">Apply</a>|<a href="https://www.ycombinator.com/companies/">Companies</a>|<a href="https://www.ycombinator.com/blog/">Blog</a>|<a href="https://news.ycombinator.com">Live HN</a>
         |<a href="mailto:hey@browserbox.io">Contact</a>
@@ -287,10 +341,19 @@
     <tr>
       <td>
         <form class="warp-form" onsubmit="return false;">
-          <button class="time-step" type="button" data-step="-1">&lt;</button>
-          <input type="date" id="warp-date" class="warp-input warp-date" title="Jump to a specific date">
-          <button class="time-step" type="button" data-step="1">&gt;</button>
+          <button class="time-step" type="button" data-step="-1" title="Back 1 day">&lt;</button>
+          <input type="date" id="warp-date" class="warp-input warp-date" title="Choose your day">
+          <button class="time-step" type="button" data-step="1" title="Forward 1 day">&gt;</button>
         </form>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 10px 12px 10px;">
+        <div class="subtext footer-info">
+          Viewing HN on <span id="snapInfo">Someday, Month 00, 0000</span>. Times are relative to 11:59 PM.
+        </div>
+        <div class="subtext footer-info" id="statsInfo"></div>
+        <div class="subtext footer-info">Made by <a class="stealth-link" href="https://github.com/DOSAYGO-STUDIO">DOSAYGO</a></div>
       </td>
     </tr>
   </table>
@@ -306,8 +369,9 @@
   // Config
   // -----------------------
   const PATHS = {
-    manifest: 'static-manifest.json?v=20251230',
-    archiveIndex: 'archive-index.json?v=20251230'
+    manifest: 'static-manifest.json.gz?v=20251230',
+    archiveIndex: 'archive-index.json?v=20251230',
+    crossIndex: 'cross-shard-index.bin.gz?v=20251230'
   };
 
   const ITEMS_PER_PAGE = 30;
@@ -325,6 +389,8 @@
   let sqlite3 = null;
   let manifest = null;
   let archiveIndex = null;
+  let crossIndex = null;
+  let crossIndexPromise = null;
   let timeShards = [];
   let timeRange = { min: null, max: null };
   let timeControlsBound = false;
@@ -344,7 +410,7 @@
   const statusRightEl = document.getElementById('status-right');
   const statusMidEl = document.getElementById('status-mid');
   const snapInfoEl = document.getElementById('snapInfo');
-  const headerDateEl = document.getElementById('header-date');
+    const headerDateEl = document.getElementById('header-date');
   const statsInfoEl = document.getElementById('statsInfo');
   const tableEl = document.getElementById('content-table');
 
@@ -632,14 +698,18 @@
     remainingMs -= minutes * 60000;
     const seconds = Math.floor(remainingMs / 1000);
 
-    const parts = [
+    const rawParts = [
       ['years', years],
       ['months', months],
       ['days', days],
       ['hours', hours],
       ['minutes', minutes],
       ['seconds', seconds]
-    ].filter(([,val], idx, arr) => val !== 0 || arr.slice(idx + 1).some(([,v]) => v !== 0));
+    ];
+    const firstIdx = rawParts.findIndex(([, val]) => val !== 0);
+    const parts = rawParts
+      .slice(firstIdx >= 0 ? firstIdx : rawParts.length - 1)
+      .filter(([, val], idx, arr) => val !== 0 || arr.slice(idx + 1).some(([, v]) => v !== 0));
     if (!parts.length) return `0 seconds ${suffix}`;
     return `${parts.map(([label,val]) => `${val} ${label}`).join(', ')} ${suffix}`;
   }
@@ -690,6 +760,70 @@
       throw new Error('gzip not supported in this browser');
     }
     return u8;
+  }
+
+  async function fetchJsonMaybeGzip(url, signal = null) {
+    const u8 = await fetchBytes(url, signal);
+    if (!u8 || u8.length === 0) return null;
+    const raw = await maybeGunzip(u8);
+    const text = new TextDecoder('utf-8').decode(raw);
+    return JSON.parse(text);
+  }
+
+  function parseCrossIndex(u8) {
+    const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+    const view = new DataView(buf);
+    const magic = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+    if (magic !== 'CSHX') throw new Error('cross index: bad magic');
+    const version = view.getUint32(4, true);
+    if (version !== 1) throw new Error(`cross index: unsupported version ${version}`);
+    const parentsCount = view.getUint32(8, true);
+    const linksCount = view.getUint32(12, true);
+    const headerBytes = 24;
+    let offset = headerBytes;
+    const parentIds = new Uint32Array(buf, offset, parentsCount);
+    offset += parentsCount * 4;
+    const offsets = new Uint32Array(buf, offset, parentsCount + 1);
+    offset += (parentsCount + 1) * 4;
+    const shardSids = new Uint16Array(buf, offset, linksCount);
+    return { parentIds, offsets, shardSids };
+  }
+
+  function findCrossShardSids(parentId) {
+    if (!crossIndex) return null;
+    const ids = crossIndex.parentIds;
+    let lo = 0;
+    let hi = ids.length - 1;
+    const target = Number(parentId);
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const v = ids[mid];
+      if (target < v) hi = mid - 1;
+      else if (target > v) lo = mid + 1;
+      else {
+        const start = crossIndex.offsets[mid];
+        const end = crossIndex.offsets[mid + 1];
+        return crossIndex.shardSids.subarray(start, end);
+      }
+    }
+    return null;
+  }
+
+  async function loadCrossIndex() {
+    if (crossIndexPromise) return crossIndexPromise;
+    crossIndexPromise = (async () => {
+      try {
+        const u8 = await fetchBytes(PATHS.crossIndex);
+        if (!u8 || u8.length === 0) return null;
+        const raw = await maybeGunzip(u8);
+        crossIndex = parseCrossIndex(raw);
+        return crossIndex;
+      } catch (err) {
+        console.warn('cross index load failed', err);
+        return null;
+      }
+    })();
+    return crossIndexPromise;
   }
 
   async function loadShardBySid(sid) {
@@ -1009,14 +1143,34 @@
   async function childIdsForParent(parentId) {
     const rec = shardRecForId(parentId);
     if (!rec) return [];
+    const ids = [];
+
     const db = await loadShardBySid(rec.sid);
-    if (!db) return [];
-    const rows = sqlAll(db, `
-      SELECT child_id FROM edges
-      WHERE parent_id=?
-      ORDER BY ord ASC
-    `, [Number(parentId)]);
-    return rows.map(r => Number(r.child_id)).filter(Number.isFinite);
+    if (db) {
+      const rows = sqlAll(db, `
+        SELECT child_id FROM edges
+        WHERE parent_id=?
+        ORDER BY ord ASC
+      `, [Number(parentId)]);
+      ids.push(...rows.map(r => Number(r.child_id)).filter(Number.isFinite));
+    }
+
+    const extraSids = findCrossShardSids(parentId);
+    if (extraSids && extraSids.length) {
+      for (const sid of extraSids) {
+        if (sid === rec.sid) continue;
+        const otherDb = await loadShardBySid(sid);
+        if (!otherDb) continue;
+        const rows = sqlAll(otherDb, `
+          SELECT child_id FROM edges
+          WHERE parent_id=?
+          ORDER BY ord ASC
+        `, [Number(parentId)]);
+        ids.push(...rows.map(r => Number(r.child_id)).filter(Number.isFinite));
+      }
+    }
+
+    return ids;
   }
 
   function renderThreadSkeleton(root) {
@@ -1424,8 +1578,9 @@
     `).join('');
 
     tableEl.innerHTML = `
-      <tr><td style="padding:10px">
-        <div class="subtext">Archive view</div>
+      <tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">HN activity over time</div>
+        <div id="activity-chart" class="archive-chart"></div>
       </td></tr>
       <tr><td style="padding:0 10px 12px 10px">
         <table class="record-table">
@@ -1450,10 +1605,6 @@
           <tr><th>Shard</th><th>Start</th><th>End</th><th>Days</th><th>Posts</th><th>Comments</th><th>Items</th><th>Size</th></tr>
           <tbody id="archive-shard-body"></tbody>
         </table>
-      </td></tr>
-      <tr><td style="padding:0 10px 16px 10px">
-        <div class="subtext" style="margin-bottom:6px">HN activity over time</div>
-        <div id="activity-chart" class="archive-chart"></div>
       </td></tr>
     `;
 
@@ -1514,9 +1665,12 @@
 
     if (currentReferenceTime) {
       const d = new Date(currentReferenceTime * 1000);
-      const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      const title = `You are viewing HN at ${label}. All times are relative to 11:59 PM that day.`;
       snapInfoEl.textContent = label;
+      snapInfoEl.title = title;
       headerDateEl.textContent = label;
+      headerDateEl.title = title;
     }
     if (warpDate) {
       if (warpDate) setWarpInputs(warpDate);
@@ -1560,13 +1714,14 @@
   async function init() {
     try {
       setStatus('Loading manifest…');
-      manifest = await fetch(PATHS.manifest, { cache:'force-cache' }).then(r => r.json());
+      manifest = await fetchJsonMaybeGzip(PATHS.manifest);
 
       // Ensure shards sorted by id_lo for binary search correctness
       manifest.shards = (manifest.shards || []).slice().sort((a,b)=>a.id_lo-b.id_lo);
       try {
         archiveIndex = await fetch(PATHS.archiveIndex, { cache: 'force-cache' }).then(r => r.json());
       } catch {}
+      loadCrossIndex();
       rebuildTimeIndex();
 
       // Derive snapshot_time if not present (OG manifest has it; but be safe)
@@ -1614,6 +1769,27 @@
 
       sqlite3 = await window.sqlite3InitModule();
       loadCollapsedState();
+
+      const logoLink = document.getElementById('logo-link');
+      if (logoLink) {
+        logoLink.addEventListener('click', () => {
+          if (!timeRange.min || !timeRange.max) return;
+          const span = timeRange.max - timeRange.min;
+          if (span <= 0) return;
+          const ts = timeRange.min + Math.floor(Math.random() * span);
+          const iso = formatISODateUTC(ts);
+          setWarpInputs(iso);
+          navigateToWarpDate(iso);
+        });
+      }
+
+      const homeLink = document.getElementById('home-link');
+      if (homeLink) {
+        homeLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          nav({ view: 'news', p: 1, warp: null, warp_date: null, id: null });
+        });
+      }
 
       window.addEventListener('popstate', () => route());
       await route();
