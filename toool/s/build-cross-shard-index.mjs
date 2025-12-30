@@ -137,7 +137,9 @@ async function main() {
   let totalEdges = 0;
 
   try {
+    let shardIndex = 0;
     for (const shard of shards) {
+      shardIndex += 1;
       const shardPath = path.join(shardsDir, shard.file);
       if (!fs.existsSync(shardPath)) {
         console.warn(`Missing shard file: ${shardPath}`);
@@ -160,7 +162,6 @@ async function main() {
         'SELECT parent_id FROM edges WHERE parent_id < ? OR parent_id > ?'
       ).iterate(shard.id_lo, shard.id_hi);
 
-      process.stdout.write(`[scan] shard ${shard.sid}... `);
       let batch = [];
       for (const row of iter) {
         batch.push({ parent_id: row.parent_id, shard_sid: shard.sid });
@@ -169,16 +170,16 @@ async function main() {
           insertMany(batch);
           batch = [];
           if (args.logEvery && totalEdges % args.logEvery === 0) {
-            process.stdout.write(`edges ${totalEdges.toLocaleString('en-US')} `);
+            process.stdout.write(`\r[scan] shard ${shardIndex}/${shards.length} sid ${shard.sid} | edges ${totalEdges.toLocaleString('en-US')}`);
           }
         }
       }
       if (batch.length) insertMany(batch);
       db.close();
-      process.stdout.write('ok\n');
+      process.stdout.write(`\r[scan] shard ${shardIndex}/${shards.length} sid ${shard.sid} | edges ${totalEdges.toLocaleString('en-US')} ok`);
     }
 
-    if (args.logEvery) process.stdout.write(`[scan] edges ${totalEdges.toLocaleString('en-US')}\n`);
+    if (args.logEvery) process.stdout.write(`\n[scan] edges ${totalEdges.toLocaleString('en-US')}\n`);
 
     const totals = tempDb.prepare('SELECT COUNT(*) as links, COUNT(DISTINCT parent_id) as parents FROM cross').get();
 

@@ -320,14 +320,17 @@ async function main() {
 
     process.stdout.write(`\r[users] items ${totalItems.toLocaleString('en-US')}\n`);
 
+    process.stdout.write('\r[users] finalizing stats (avg_score + indexes)...');
     tempDb.exec('UPDATE users SET avg_score = CAST(sum_score AS REAL) / NULLIF(items, 0)');
     tempDb.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
     tempDb.exec('CREATE INDEX IF NOT EXISTS idx_user_domains_username ON user_domains(username)');
     tempDb.exec('CREATE INDEX IF NOT EXISTS idx_user_months_username ON user_months(username)');
+    process.stdout.write('\r[users] finalizing stats (avg_score + indexes) ok\n');
 
     const growthCounts = new Map();
     const activeCounts = new Map();
 
+    process.stdout.write('\r[users] computing growth + active months...');
     const firstRows = tempDb.prepare('SELECT first_time FROM users WHERE first_time IS NOT NULL').iterate();
     for (const row of firstRows) {
       const m = monthKey(row.first_time);
@@ -343,6 +346,7 @@ async function main() {
 
     const totalUsersRow = tempDb.prepare('SELECT COUNT(*) as c FROM users').get();
     const totalUsers = totalUsersRow ? totalUsersRow.c : 0;
+    process.stdout.write('\r[users] computing growth + active months ok\n');
 
     const userIter = tempDb.prepare('SELECT * FROM users ORDER BY username COLLATE NOCASE').iterate();
     const domainIter = tempDb.prepare('SELECT username, domain, count FROM user_domains ORDER BY username COLLATE NOCASE').iterate();
@@ -435,6 +439,7 @@ async function main() {
     let monthStmt = insertMonth();
     let userCountSinceCheck = 0;
 
+    let userRows = 0;
     for (const user of userIter) {
       const uname = String(user.username || '');
       if (!shardUserLo) shardUserLo = lowerName(uname);
@@ -467,9 +472,14 @@ async function main() {
           monthStmt = insertMonth();
         }
       }
+      userRows += 1;
+      if (userRows % 20000 === 0) {
+        process.stdout.write(`\r[users] writing shards... ${userRows.toLocaleString('en-US')} users`);
+      }
     }
 
     if (shardUsers > 0) finalizeShard();
+    process.stdout.write(`\r[users] writing shards... ${userRows.toLocaleString('en-US')} users ok\n`);
 
     const out = {
       version: 1,
@@ -496,6 +506,18 @@ async function main() {
 
     fs.writeFileSync(outManifest, JSON.stringify(out, null, 2));
     console.log(`Wrote ${outManifest}`);
+    if (gzipOut) {
+      const gzPath = `${outManifest}.gz`;
+      gzipFileSync(outManifest, gzPath);
+      try {
+        validateGzipFileSync(gzPath);
+      } catch (err) {
+        console.error(`\n[user] gzip validation failed for manifest: ${err && err.message ? err.message : err}`);
+        process.exit(1);
+      }
+      if (!keepSqlite) fs.unlinkSync(outManifest);
+      console.log(`Wrote ${gzPath}`);
+    }
   } finally {
     try { tempDb.close(); } catch {}
     for (const p of tempFiles) {

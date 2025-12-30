@@ -3,11 +3,17 @@ node_modules/.cache/
 node_modules/
 package-lock.json
 package.json
+data/raw/*.json.gz
+data/raw/*.gstmp
+data/*.sqlite
+data/*-wal
+data/*-shm
 docs/static-shards/
 docs/static-shards/*.sqlite
 docs/static-shards/*.sqlite.gz
 docs/static-user-stats-shards/*.sqlite
 docs/static-user-stats-shards/*.sqlite.gz
+docs/cross-shard-index.bin
 *journal
 *.wal
 *.shm

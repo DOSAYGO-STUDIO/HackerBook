@@ -434,9 +434,9 @@
   // -----------------------
   const PATHS = {
     manifest: 'static-manifest.json.gz?v=20251230',
-    archiveIndex: 'archive-index.json?v=20251230',
+    archiveIndex: 'archive-index.json.gz?v=20251230',
     crossIndex: 'cross-shard-index.bin.gz?v=20251230',
-    userStatsManifest: 'static-user-stats-manifest.json?v=20251230'
+    userStatsManifest: 'static-user-stats-manifest.json.gz?v=20251230'
   };
 
   const ITEMS_PER_PAGE = 30;
@@ -1686,7 +1686,7 @@
   // -----------------------
   async function loadArchiveIndex() {
     if (archiveIndex) return archiveIndex;
-    archiveIndex = await fetch(PATHS.archiveIndex, { cache: 'force-cache' }).then(r => r.json());
+    archiveIndex = await fetchJsonMaybeGzip(PATHS.archiveIndex);
     return archiveIndex;
   }
 
@@ -2278,7 +2278,7 @@
       // Ensure shards sorted by id_lo for binary search correctness
       manifest.shards = (manifest.shards || []).slice().sort((a,b)=>a.id_lo-b.id_lo);
       try {
-        archiveIndex = await fetch(PATHS.archiveIndex, { cache: 'force-cache' }).then(r => r.json());
+        archiveIndex = await fetchJsonMaybeGzip(PATHS.archiveIndex);
       } catch {}
       loadCrossIndex();
       rebuildTimeIndex();

@@ -66,6 +66,8 @@ const MAX_RAW_BYTES = Math.floor((MAX_MB * 1024 * 1024) / Math.max(GZIP_RATIO, 0
 
 // Modes
 const PRESORTED = !!args.presorted;
+const FROM_STAGING = !!args["from-staging"];
+const DELETE_STAGING = !!args["delete-staging"];
 
 // Post-pass behaviors
 const GZIP_SHARDS = !!args.gzip;                 // do final gz + manifest rewrite
@@ -76,12 +78,12 @@ const VACUUM_AT_END = args["vacuum"] === false ? false : true; // default true
 const WRITE_BATCH = Number(args["write-batch"] ?? 5000); // batch rows per transaction
 
 // Safety
-if (!fs.existsSync(DATA_DIR)) {
+fs.mkdirSync(OUT_DIR, { recursive: true });
+fs.mkdirSync(path.dirname(MANIFEST_PATH), { recursive: true });
+if (!FROM_STAGING && !fs.existsSync(DATA_DIR)) {
   console.error(`DATA_DIR not found: ${DATA_DIR}`);
   process.exit(1);
 }
-fs.mkdirSync(OUT_DIR, { recursive: true });
-fs.mkdirSync(path.dirname(MANIFEST_PATH), { recursive: true });
 
 // -------------------- Helpers --------------------
 function listGzFiles(dir) {
@@ -363,8 +365,8 @@ function vacuumAndGzipAllShards(manifest) {
 
 // -------------------- Main build --------------------
 async function main() {
-  const files = listGzFiles(DATA_DIR);
-  if (!files.length) {
+  const files = FROM_STAGING ? [] : listGzFiles(DATA_DIR);
+  if (!FROM_STAGING && !files.length) {
     console.error(`No .json.gz files found in ${DATA_DIR}`);
     process.exit(1);
   }
@@ -372,7 +374,19 @@ async function main() {
   let iter;
   let stagedDb = null;
 
-  if (!PRESORTED) {
+  if (FROM_STAGING) {
+    if (!fs.existsSync(STAGING_PATH)) {
+      console.error(`Staging DB not found: ${STAGING_PATH}`);
+      process.exit(1);
+    }
+    console.log(`[1/3] Using existing staging DB: ${STAGING_PATH}`);
+    stagedDb = new Database(STAGING_PATH, { readonly: true });
+    iter = stagedDb.prepare(`
+      SELECT id,time,type,by,title,text,url,score,parent,dead,deleted,kids_json
+      FROM items_raw
+      ORDER BY id ASC
+    `).iterate();
+  } else if (!PRESORTED) {
     console.log(`[1/3] Staging + sorting by id into ${STAGING_PATH}`);
     stagedDb = initStagingDb(STAGING_PATH);
     await stageAllInput(stagedDb, files);
@@ -625,6 +639,14 @@ async function main() {
   closeShard();
 
   if (stagedDb) stagedDb.close();
+  if (DELETE_STAGING) {
+    if (fs.existsSync(STAGING_PATH)) {
+      fs.unlinkSync(STAGING_PATH);
+      console.log(`[post] deleted staging DB: ${STAGING_PATH}`);
+    } else {
+      console.warn(`[post] staging DB not found for deletion: ${STAGING_PATH}`);
+    }
+  }
 
   // Derive snapshot end time, and print global start date
   manifest.snapshot_time = globalTmax;
