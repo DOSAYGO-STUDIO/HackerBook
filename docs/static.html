@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
   <meta name="referrer" content="origin">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HN Backup Tape - A Static Retrospective of Hacker News (2006-2025)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hacker Book - A Static Retrospective of Hacker News (2006-2025)</title>
   <link rel="icon" type="image/png" href="cd.png?v=20251230">
   <link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
   <style>
-    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-    body { font-family: Verdana, Geneva, sans-serif; font-size: 10pt; color:#000; margin:0; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: hidden; }
+    body { font-family: Verdana, Geneva, sans-serif; font-size: 10pt; color:#000; margin:0; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: hidden; }
     a:link { color:#0000cc; text-decoration:none; }
     a:visited { color:#828282; text-decoration:none; }
     .morelink:visited { color:#0000cc; }
     a:hover { text-decoration:underline; }
-    #hnmain { background:#f6f6ef; }
+    #hnmain { background:#f6f6ef; max-width: 100vw; }
     .topbar { background:#9a9a9a; } /* archive gray */
     .pagetop { font-size:10pt; color:#000; }
     .nav-cell {
@@ -242,8 +242,9 @@
       align-items: center;
       justify-content: center;
       box-sizing: border-box;
+      vertical-align: middle;
     }
-    .logo-icon { width: 16px; height: 16px; image-rendering: pixelated; }
+    .logo-icon { width: 16px; height: 16px; image-rendering: pixelated; display: block; }
     .query-input {
       width: 100%;
       min-height: 140px;
@@ -376,7 +377,7 @@
             <td class="nav-cell">
               <div class="nav-wrap">
                 <span class="pagetop">
-                  <b class="hnname"><a href="?view=news" data-spa id="home-link" title="Go to the most recent snapshot">HN Backup Tape</a></b>
+                  <b class="hnname"><a href="?view=news" data-spa id="home-link" title="Go to the most recent snapshot">Hacker Book</a></b>
                   <a href="?view=newest" data-spa>new</a> |
                   <a href="?view=news" data-spa>front</a> |
                   <a href="#" id="start-link" title="Go to the first day">start</a> |

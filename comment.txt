@@ -1,14 +1,3 @@
-Oct 9, 2006 to Dec 27, 2025 – 7,020 Days of Hacker News
+Community, All the HN belong to you. When I made HN Made of Primes I realized I could probably do this offline sqlite/wasm thing with the whole GBs of archive. The whole dataset. So I tried it, and this is it. Have Hacker News on your device.
 
-I built a fully static, client-side Hacker News archive that runs entirely in your browser using SQLite WASM.
-
-Demo: https://57a1da90.static-news-dtg.pages.dev
-Code: https://github.com/DOSAYGO-STUDIO/static-news
-
-It’s a complete HN archive served as static assets (Cloudflare Pages, no backend). Your browser downloads only the shard(s) it needs and runs queries locally. You can time-warp to any day from Oct 9, 2006 to Dec 27, 2025.
-
-Notes / caveats:
-- We don’t yet have canonical daily front page ordering (that would require scraping /front?date=; I haven’t coordinated with the mods).
-- Some ASCII art (e.g., Christmas trees) is imperfect because the BigQuery export flattens <pre><code> blocks; I reflow it heuristically.
-
-Would love feedback on load time, time-warp UX, and anything that feels off.
+Go to this repo: you can download it. Big Query -> ETL -> npx serve docs - that's it. 20 years of HN arguments and beauty, can be yours forever. So they'll never die. Ever. It's the unkillable static archive of HN and it's your hands. That's my Year End gift to you all. Thank you for a wonderful year, have happy and wonderful 2026. make something of it.
