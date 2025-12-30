@@ -3,6 +3,7 @@
 Static, offline-friendly Hacker News archive shipped as plain files. Everything runs client-side in your browser via SQLite WASM; the browser only downloads the shards it needs.
 
 - Demo: https://hackerbook.dosaygo.com
+- Landing / download: https://dosaygo-studio.github.io/HackerBook/
 - Code: https://github.com/DOSAYGO-STUDIO/static-news
 
 ## Quick start (browse the archive)
