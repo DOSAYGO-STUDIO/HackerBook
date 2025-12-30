@@ -237,6 +237,39 @@
       box-sizing: border-box;
     }
     .logo-icon { width: 16px; height: 16px; image-rendering: pixelated; }
+    .query-input {
+      width: 100%;
+      min-height: 140px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 10pt;
+      border: 1px solid #9a9a9a;
+      background: #f6f6ef;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    .query-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .query-output {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 9pt;
+      background: #f6f6ef;
+      border: 1px solid #9a9a9a;
+      padding: 8px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .schema-block {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 9pt;
+      background: #f6f6ef;
+      border: 1px solid #9a9a9a;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
     @media (max-width: 1200px) {
       .status-cell { width: auto; white-space: normal; }
       .header-right {
@@ -296,7 +329,8 @@
                   <a href="?view=news" data-spa>front</a> |
                   <a href="?view=ask" data-spa>ask</a> |
                   <a href="?view=show" data-spa>show</a> |
-                  <a href="?view=jobs" data-spa>jobs</a>
+                  <a href="?view=jobs" data-spa>jobs</a> |
+                  <a href="?view=query" data-spa>query</a>
                   <span id="status-mid"></span>
                 </span>
               </div>
@@ -371,7 +405,8 @@
   const PATHS = {
     manifest: 'static-manifest.json.gz?v=20251230',
     archiveIndex: 'archive-index.json?v=20251230',
-    crossIndex: 'cross-shard-index.bin.gz?v=20251230'
+    crossIndex: 'cross-shard-index.bin.gz?v=20251230',
+    userStatsManifest: 'static-user-stats-manifest.json?v=20251230'
   };
 
   const ITEMS_PER_PAGE = 30;
@@ -391,6 +426,9 @@
   let archiveIndex = null;
   let crossIndex = null;
   let crossIndexPromise = null;
+  let userStatsManifest = null;
+  const userStatsCache = new Map();
+  const userStatsInFlight = new Map();
   let timeShards = [];
   let timeRange = { min: null, max: null };
   let timeControlsBound = false;
@@ -529,6 +567,12 @@
 
   function hostFromUrl(url) {
     try { return new URL(url).host.replace(/^www\./,''); } catch { return ''; }
+  }
+
+  function userLinkHtml(username) {
+    if (!username) return '';
+    const byEsc = encodeURIComponent(username);
+    return `<a class="hnuser" href="?view=user&id=${byEsc}" data-spa>${username}</a>`;
   }
 
   let currentReferenceTime = 0;
@@ -867,6 +911,56 @@
     return promise;
   }
 
+  async function loadUserStatsManifest() {
+    if (userStatsManifest) return userStatsManifest;
+    userStatsManifest = await fetchJsonMaybeGzip(PATHS.userStatsManifest);
+    return userStatsManifest;
+  }
+
+  function bucketForUsername(name, alphabet) {
+    const c = (name || '').trim().toLowerCase()[0] || '_';
+    const idx = (alphabet || '').indexOf(c);
+    return idx >= 0 ? idx : (alphabet || '').indexOf('_');
+  }
+
+  async function loadUserStatsShard(username) {
+    const manifest = await loadUserStatsManifest();
+    if (!manifest) return null;
+    const sid = bucketForUsername(username, manifest.alphabet);
+    if (sid == null || sid < 0) return null;
+    if (userStatsCache.has(sid)) return userStatsCache.get(sid);
+    if (userStatsInFlight.has(sid)) return userStatsInFlight.get(sid);
+
+    const rec = (manifest.shards || []).find(s => s.sid === sid);
+    if (!rec) return null;
+
+    const promise = (async () => {
+      try {
+        const u8 = await fetchBytes('static-user-stats-shards/' + rec.file);
+        if (!u8 || u8.length === 0) return null;
+        const raw = await maybeGunzip(u8);
+        const p = sqlite3.wasm.allocFromTypedArray(raw);
+        const db = new sqlite3.oo1.DB();
+        sqlite3.capi.sqlite3_deserialize(
+          db.pointer, "main", p, raw.byteLength, raw.byteLength,
+          sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE
+        );
+        userStatsCache.set(sid, db);
+        if (userStatsCache.size > 5) {
+          const oldest = userStatsCache.keys().next().value;
+          try { userStatsCache.get(oldest).close(); } catch {}
+          userStatsCache.delete(oldest);
+        }
+        return db;
+      } finally {
+        userStatsInFlight.delete(sid);
+      }
+    })();
+
+    userStatsInFlight.set(sid, promise);
+    return promise;
+  }
+
   // -----------------------
   // SQL helpers
   // -----------------------
@@ -876,6 +970,20 @@
   function sqlOne(db, sql, bind=[]) {
     const rows = sqlAll(db, sql, bind);
     return rows[0] || null;
+  }
+
+  function isSafeQuery(sql) {
+    const s = String(sql || '').trim().replace(/;+\s*$/g, '');
+    if (!s) return false;
+    if (!/^(select|with)\b/i.test(s)) return false;
+    if (/(\\bpragma\\b|\\battach\\b|\\bdetach\\b|\\bdrop\\b|\\balter\\b|\\bupdate\\b|\\binsert\\b|\\bdelete\\b|\\bcreate\\b|\\bvacuum\\b)/i.test(s)) return false;
+    return true;
+  }
+
+  function wrapQuery(sql, maxRows) {
+    const s = String(sql || '').trim().replace(/;+\s*$/g, '');
+    if (/\\blimit\\b/i.test(s)) return s;
+    return `SELECT * FROM (${s}) LIMIT ${maxRows}`;
   }
 
   // -----------------------
@@ -1063,6 +1171,7 @@
       const site = it.url ? hostFromUrl(url) : '';
       const points = (it.score == null) ? '' : `${it.score} points`;
       const by = it.by || '';
+      const byHtml = by ? userLinkHtml(by) : '';
       const age = timeAgoSnapshot(it.time);
       const cnt = commentCounts.get(it.id) || 0;
       const comments = cnt > 0 ? `${cnt}+ comments` : 'discuss';
@@ -1085,7 +1194,7 @@
           <td class="subtext">
             <span class="subline">
               ${points ? `<span class="score" id="score_${it.id}">${points}</span>` : ``}
-              ${by ? `by <span class="hnuser">${by}</span>` : ``}
+              ${by ? `by ${byHtml}` : ``}
               ${age ? `<span class="age"><a href="?view=item&id=${it.id}" onclick="nav({view:'item',id:${it.id}});return false;">${age}</a></span>` : ``}
               ${comments ? `| <a href="?view=item&id=${it.id}" onclick="nav({view:'item',id:${it.id}});return false;">${comments}</a>` : ``}
             </span>
@@ -1177,6 +1286,7 @@
     const title = decodeEntities(root.title || '[untitled]');
     const url = root.url ? decodeEntities(root.url) : '';
     const by = root.by || '';
+    const byHtml = by ? userLinkHtml(by) : '';
     const age = timeAgoSnapshot(root.time);
     const points = (root.score == null) ? '' : `${root.score} points`;
     const site = url ? hostFromUrl(url) : '';
@@ -1198,7 +1308,7 @@
             <td class="subtext">
               <span class="subline">
                 ${points ? `<span class="score">${points}</span>` : ``}
-                ${by ? `by <span class="hnuser">${by}</span>` : ``}
+                ${by ? `by ${byHtml}` : ``}
                 ${age ? `<span class="age">${age}</span>` : ``}
               </span>
             </td>
@@ -1213,6 +1323,7 @@
 
   function commentRowHtml(c, indent) {
     const by = c.by || '';
+    const byHtml = by ? userLinkHtml(by) : '';
     const age = timeAgoSnapshot(c.time);
     const text = c.text ? fixFlatPreBlocks(decodeEntities(c.text)) : '';
     const pad = indent * 40;
@@ -1227,7 +1338,7 @@
               <td class="default">
                 <div style="margin-top:2px; margin-bottom:-10px;">
                   <span class="comhead">
-                    ${by ? `<span class="hnuser">${by}</span>` : ``}
+                    ${by ? byHtml : ``}
                     ${age ? `<span class="age"><a href="?view=comment&id=${c.id}" onclick="nav({view:'comment',id:${c.id}});return false;">${age}</a></span>` : ``}
                     <a class="togg" href="#" data-toggle-id="${c.id}" onclick="toggleThread(${c.id});return false;">[–]</a>
                   </span>
@@ -1369,6 +1480,7 @@
     const title = decodeEntities(item.title || '[comment]');
     const text = item.text ? fixFlatPreBlocks(decodeEntities(item.text)) : '';
     const by = item.by || '';
+    const byHtml = by ? userLinkHtml(by) : '';
     const score = item.score != null ? Number(item.score) : null;
     const absTime = formatAbsoluteTime(item.time);
     const relTime = timeAgoSnapshot(item.time);
@@ -1385,7 +1497,7 @@
         <table class="record-table">
           <tr><td class="record-label">ID</td><td class="title">${item.id}</td></tr>
           ${item.type ? `<tr><td class="record-label">Type</td><td class="title">${item.type}</td></tr>` : ``}
-          ${by ? `<tr><td class="record-label">Author</td><td class="title">${by}</td></tr>` : ``}
+          ${by ? `<tr><td class="record-label">Author</td><td class="title">${byHtml}</td></tr>` : ``}
           ${score != null ? `<tr><td class="record-label">Score</td><td class="title">${score}</td></tr>` : ``}
           ${relTime ? `<tr><td class="record-label">Relative (simple)</td><td class="title">${relTime}</td></tr>` : ``}
           ${warpRelative ? `<tr><td class="record-label">Relative (warp)</td><td class="title">${warpRelative}</td></tr>` : ``}
@@ -1563,12 +1675,46 @@
     new uPlot(opts, data, target);
   }
 
+  function setupUserGrowthChart(growth) {
+    const target = document.getElementById('user-growth-chart');
+    if (!target || !window.uPlot || !growth || !growth.length) return;
+
+    const xs = growth.map(g => {
+      const [y, m] = String(g.month).split('-').map(Number);
+      return Date.UTC(y, (m || 1) - 1, 1) / 1000;
+    });
+    const ys = growth.map(g => g.total_users || 0);
+    if (!xs.length) return;
+
+    const data = [xs, ys];
+    const opts = {
+      width: target.clientWidth || 640,
+      height: 200,
+      scales: { x: { time: true } },
+      series: [
+        {},
+        { label: 'Users', stroke: '#0000cc', width: 1 }
+      ],
+      axes: [
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' } },
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' } }
+      ]
+    };
+
+    new uPlot(opts, data, target);
+  }
+
   async function renderArchiveView(token = 0) {
     setStatus('Loading archive…');
     const data = await loadArchiveIndex();
     if (token && token !== routeToken) return;
 
     const shards = (data.shards || []).slice().sort((a,b) => a.sid - b.sid);
+    let userGrowth = [];
+    try {
+      const um = await loadUserStatsManifest();
+      userGrowth = um?.user_growth || [];
+    } catch {}
     const manifestRows = (data.manifests || []).map(m => `
       <tr>
         <td><span class="doc-icon"></span><a href="${m.file}">${m.file}</a></td>
@@ -1581,6 +1727,10 @@
       <tr><td style="padding:0 10px 12px 10px">
         <div class="subtext" style="margin-bottom:6px">HN activity over time</div>
         <div id="activity-chart" class="archive-chart"></div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">HN user growth over time</div>
+        <div id="user-growth-chart" class="archive-chart"></div>
       </td></tr>
       <tr><td style="padding:0 10px 12px 10px">
         <table class="record-table">
@@ -1642,7 +1792,165 @@
       }
     }
 
-    requestAnimationFrame(() => setupArchiveChart(shards));
+    requestAnimationFrame(() => {
+      setupArchiveChart(shards);
+      setupUserGrowthChart(userGrowth);
+    });
+    setStatus('');
+  }
+
+  async function renderQueryView(token = 0) {
+    const schema = `tables:\n  items(id INTEGER PRIMARY KEY, type TEXT, time INTEGER, by TEXT, title TEXT, text TEXT, url TEXT, score INTEGER, parent INTEGER)\n  edges(parent_id INTEGER, ord INTEGER, child_id INTEGER)\n\nexamples:\n  SELECT id, title, by, time, score FROM items WHERE type='story' ORDER BY time DESC LIMIT 30\n  SELECT by, COUNT(*) as items FROM items GROUP BY by ORDER BY items DESC LIMIT 20\n  SELECT * FROM items WHERE time BETWEEN 1700000000 AND 1700864000 LIMIT 100`;
+    tableEl.innerHTML = `
+      <tr><td style="padding:10px">
+        <div class="subtext">Query the archive (SQL)</div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">Schema</div>
+        <div class="schema-block">${schema}</div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <textarea id="query-input" class="query-input" spellcheck="false">SELECT id, title, by, time, score FROM items WHERE type='story' ORDER BY time DESC LIMIT 30</textarea>
+        <div class="query-actions">
+          <button class="time-step" id="query-run" type="button">Run query</button>
+          <span class="subtext" id="query-status"></span>
+        </div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">Results</div>
+        <pre id="query-output" class="query-output">No query run.</pre>
+      </td></tr>
+    `;
+
+    const input = document.getElementById('query-input');
+    const status = document.getElementById('query-status');
+    const output = document.getElementById('query-output');
+    const runBtn = document.getElementById('query-run');
+
+    const MAX_ROWS = 500;
+
+    async function runQuery() {
+      if (!input || !output || !status) return;
+      const raw = input.value || '';
+      if (!isSafeQuery(raw)) {
+        output.textContent = 'Only SELECT/CTE queries are allowed.';
+        return;
+      }
+      const sql = wrapQuery(raw, MAX_ROWS);
+      const shards = (timeShards && timeShards.length)
+        ? timeShards.map(s => s.sid)
+        : (manifest?.shards || []).map(s => s.sid);
+      const results = [];
+      let scanned = 0;
+      status.textContent = 'Running...';
+      output.textContent = '';
+
+      for (const sid of shards) {
+        if (token && token !== routeToken) return;
+        const db = await loadShardBySid(sid);
+        scanned += 1;
+        if (!db) continue;
+        try {
+          const rows = sqlAll(db, sql);
+          results.push(...rows);
+        } catch (err) {
+          output.textContent = String(err && err.message ? err.message : err);
+          status.textContent = '';
+          return;
+        }
+        status.textContent = `Scanned ${scanned}/${timeShards.length || shards.length} shard(s)...`;
+        if (results.length >= MAX_ROWS) break;
+        await new Promise(r => requestAnimationFrame(() => r()));
+      }
+
+      const trimmed = results.slice(0, MAX_ROWS);
+      output.textContent = JSON.stringify(trimmed, null, 2) || 'No rows.';
+      status.textContent = `Rows: ${trimmed.length}`;
+    }
+
+    if (runBtn) runBtn.addEventListener('click', runQuery);
+  }
+
+  async function renderUserView(username, token = 0) {
+    setStatus('Loading user…');
+    const uname = String(username || '').trim();
+    if (!uname) {
+      tableEl.innerHTML = `<tr><td style="padding:14px" class="loading">User not found.</td></tr>`;
+      setStatus('');
+      return;
+    }
+
+    const db = await loadUserStatsShard(uname);
+    if (token && token !== routeToken) return;
+    if (!db) {
+      tableEl.innerHTML = `<tr><td style="padding:14px" class="loading">User stats not available.</td></tr>`;
+      setStatus('');
+      return;
+    }
+
+    const user = sqlOne(db, `SELECT * FROM users WHERE username=? LIMIT 1`, [uname]);
+    if (!user) {
+      tableEl.innerHTML = `<tr><td style="padding:14px" class="loading">User not found.</td></tr>`;
+      setStatus('');
+      return;
+    }
+
+    const topDomains = sqlAll(db, `
+      SELECT domain, count FROM user_domains
+      WHERE username=? ORDER BY count DESC, domain ASC LIMIT 8
+    `, [uname]);
+
+    const topMonths = sqlAll(db, `
+      SELECT month, count FROM user_months
+      WHERE username=? ORDER BY count DESC, month DESC LIMIT 8
+    `, [uname]);
+
+    const first = formatAbsoluteTime(user.first_time);
+    const last = formatAbsoluteTime(user.last_time);
+    const spanDays = user.first_time && user.last_time ? Math.max(1, Math.round((user.last_time - user.first_time) / 86400)) : null;
+    const avgPerDay = spanDays ? (user.items / spanDays).toFixed(2) : null;
+    const bestTitle = user.max_score_title ? decodeEntities(user.max_score_title) : '[item]';
+
+    tableEl.innerHTML = `
+      <tr><td style="padding:10px">
+        <div class="subtext">User archive record</div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <table class="record-table">
+          <tr><td class="record-label">User</td><td class="title">${uname}</td></tr>
+          <tr><td class="record-label">First seen</td><td class="title">${first || 'n/a'}</td></tr>
+          <tr><td class="record-label">Last seen</td><td class="title">${last || 'n/a'}</td></tr>
+          ${spanDays ? `<tr><td class="record-label">Active span</td><td class="title">${spanDays.toLocaleString('en-US')} days</td></tr>` : ``}
+          ${avgPerDay ? `<tr><td class="record-label">Avg items/day</td><td class="title">${avgPerDay}</td></tr>` : ``}
+          <tr><td class="record-label">Items</td><td class="title">${(user.items || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Comments</td><td class="title">${(user.comments || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Stories</td><td class="title">${(user.stories || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Ask</td><td class="title">${(user.ask || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Show</td><td class="title">${(user.show || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Launch</td><td class="title">${(user.launch || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Jobs</td><td class="title">${(user.jobs || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Polls</td><td class="title">${(user.polls || 0).toLocaleString('en-US')}</td></tr>
+          <tr><td class="record-label">Avg score</td><td class="title">${Number.isFinite(user.avg_score) ? user.avg_score.toFixed(2) : 'n/a'}</td></tr>
+          <tr><td class="record-label">Best score</td><td class="title">${user.max_score != null ? user.max_score : 'n/a'}</td></tr>
+          ${user.max_score_id ? `<tr><td class="record-label">Best item</td><td class="title"><a href="?view=item&id=${user.max_score_id}" data-spa>${bestTitle}</a></td></tr>` : ``}
+        </table>
+      </td></tr>
+      ${topDomains.length ? `<tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">Top domains</div>
+        <table class="archive-table">
+          <tr><th>Domain</th><th>Count</th></tr>
+          ${topDomains.map(d => `<tr><td>${d.domain}</td><td>${d.count}</td></tr>`).join('')}
+        </table>
+      </td></tr>` : ``}
+      ${topMonths.length ? `<tr><td style="padding:0 10px 12px 10px">
+        <div class="subtext" style="margin-bottom:6px">Top months</div>
+        <table class="archive-table">
+          <tr><th>Month</th><th>Count</th></tr>
+          ${topMonths.map(m => `<tr><td>${m.month}</td><td>${m.count}</td></tr>`).join('')}
+        </table>
+      </td></tr>` : ``}
+    `;
+
     setStatus('');
   }
 
@@ -1689,12 +1997,26 @@
       return;
     }
 
+    if (view === 'user' && id) {
+      currentThreadId = null;
+      clearResumeStates();
+      await renderUserView(id, token);
+      return;
+    }
+
     if (view === 'archive') {
       currentThreadId = null;
       clearResumeStates();
       await renderArchiveView(token);
       if (token !== routeToken) return;
       history.replaceState({}, '', location.href);
+      return;
+    }
+
+    if (view === 'query') {
+      currentThreadId = null;
+      clearResumeStates();
+      await renderQueryView(token);
       return;
     }
 

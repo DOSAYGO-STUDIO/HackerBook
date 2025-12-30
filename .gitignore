@@ -6,3 +6,8 @@ package.json
 docs/static-shards/
 docs/static-shards/*.sqlite
 docs/static-shards/*.sqlite.gz
+docs/static-user-stats-shards/*.sqlite
+docs/static-user-stats-shards/*.sqlite.gz
+*.journal
+*.wal
+*.shm
