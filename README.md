@@ -1,6 +1,6 @@
 # Hacker Book - The unkillable, offline Hacker News archive
 
-![CI](https://github.com/DOSAYGO-STUDIO/HackerBook/actions/workflows/ci.yml/badge.svg) ![License](https://img.shields.io/github/license/DOSAYGO-STUDIO/HackerBook) ![Stars](https://img.shields.io/github/stars/DOSAYGO-STUDIO/HackerBook?style=flat) ![Archive size](https://img.shields.io/badge/archive-~9GB%20gz-blue)
+![CI](https://github.com/DOSAYGO-STUDIO/HackerBook/actions/workflows/ci.yml/badge.svg) ![License](https://img.shields.io/github/license/DOSAYGO-STUDIO/HackerBook) ![Stars](https://img.shields.io/github/stars/DOSAYGO-STUDIO/HackerBook?style=flat) ![Archive size](https://img.shields.io/badge/archive-~9GB%20gz-blue) [![Show HN](https://img.shields.io/badge/Show%20HN-22GB%20SQLite-orange)](https://news.ycombinator.com/item?id=42550993)
 
 Community, all the HN belong to you. This repo packages 20 years of Hacker News into a **static** archive you can run entirely in your browser. The site is just files: HTML, JSON, and gzipped SQLite shards. No server app required.
 
@@ -16,6 +16,7 @@ Community, all the HN belong to you. This repo packages 20 years of Hacker News 
 - [What this is](#what-this-is)
 - [How it works](#how-it-works)
 - [Screenshots](#screenshots)
+- [Prerequisites](#prerequisites)
 - [Quick start](#quick-start)
 - [Repository layout](#repository-layout)
 - [Pipeline overview](#pipeline-overview)
@@ -63,19 +64,37 @@ Inspired by HN Made of Primes, this is the "year-end gift" to the community: kee
 
 ![Me view](docs/assets/hn-me.png)
 
+## Prerequisites
+- **Node.js 20+** (Required for tools and ETL)
+- **Google Cloud SDK** (Required if using `download_hn.sh` to fetch raw data)
+- **Disk Space**: ~45GB free (If running the full archivist workflow: 22GB raw + staging + shards)
+
 ## Quick start
 Always run `npm install` once in the repo root.
 
-**Archivist workflow (the short version)**
-BigQuery -> ETL -> `npx serve docs`
+### 1. Viewer Mode (Run locally)
+Download the pre-built site to browse offline without building the database.
+```bash
+node toool/download-site.mjs
+npx serve docs
+# OR
+python3 -m http.server 8000 --directory docs
+```
 
-**Build + prep everything**
-1) `./toool/s/predeploy-checks.sh [--use-staging] [--restart-etl] [--from-shards] [--hash-only]`
-2) Serve `docs/` locally: `npx serve docs` or `python3 -m http.server 8000 --directory docs`
+### 2. Archivist Mode (Build from scratch)
+Full pipeline: BigQuery -> ETL -> Shards.
 
-**Download the published site (no ETL)**
-1) `node toool/download-site.mjs [--base URL] [--out DIR] [--no-shards]`
-2) Serve the downloaded folder.
+```bash
+# 1. Download raw data (Requires GCP configuration)
+./download_hn.sh
+
+# 2. Build shards and indexes
+npm run etl
+
+# 3. Finalize and serve
+./toool/s/predeploy-checks.sh --restart-etl
+npx serve docs
+```
 
 > [!TIP]
 > Use `AUTO_RUN=1` for unattended pipeline runs. ✨
@@ -145,31 +164,24 @@ The app switches to these shards for the `?view=me` view and when you select "Us
 
 ## Tech deep dive
 ### Data flow: BigQuery -> shards
-```
-BigQuery (public dataset)
-        |
-        v
-download_hn.sh  ->  data/raw/*.json.gz
-        |
-        v
-etl-hn.js (staging optional)
-        |
-        v
-.sqlite shards  ->  VACUUM  ->  gzip  ->  hash rename
-        |
-        v
-static-manifest.json(.gz)
+```mermaid
+graph TD
+  BQ[BigQuery Public Dataset] -->|download_hn.sh| Raw[data/raw/*.json.gz]
+  Raw -->|etl-hn.js| Shards[SQLite Shards]
+  Shards -->|Post-pass| GzShards[Gzipped Shards]
+  GzShards --> Manifest[static-manifest.json]
 ```
 
 ### Shard + index flow
-```
-static-shards/ (items + edges)
-        |
-        +--> build-archive-index.js  ->  archive-index.json(.gz)
-        |
-        +--> build-cross-shard-index.mjs  ->  cross-shard-index.bin(.gz)
-        |
-        +--> build-user-stats.mjs  ->  static-user-stats-shards/ + manifest
+```mermaid
+graph TD
+  Shards[static-shards/] --> Archive[build-archive-index.js]
+  Shards --> Cross[build-cross-shard-index.mjs]
+  Shards --> UserStats[build-user-stats.mjs]
+  
+  Archive --> ArchiveIdx[archive-index.json]
+  Cross --> CrossIdx[cross-shard-index.bin]
+  UserStats --> UserIdx[static-user-stats-shards/]
 ```
 
 ### SQLite schema (items/edges)
@@ -238,6 +250,7 @@ WHERE deleted IS NULL OR deleted = false
 - `cross-shard-index.bin(.gz)` updated.
 - `static-user-stats-manifest.json(.gz)` updated.
 - Cache-bust string bumped in `docs/index.html` and `docs/static.html`.
+- **Verification**: Run `./toool/s/ci-verify.sh` to ensure core assets are in place.
 
 ## Contribute analysis
 Have charts or analyses you want to feature? Email a link and a short caption to `hey@browserbox.io`. Bonus points for fresh takes and bold visualizations. 📊

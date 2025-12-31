@@ -1,6 +1,16 @@
 {
   "name": "static-news",
   "version": "1.0.0",
+  "description": "The unkillable, offline Hacker News archive running entirely in the browser.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DOSAYGO-STUDIO/HackerBook.git"
+  },
+  "author": "DOSAYGO-STUDIO",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "etl": "node etl-hn.js --gzip",
     "sync-docs": "cp docs/static.html docs/index.html"
