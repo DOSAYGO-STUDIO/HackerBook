@@ -388,7 +388,7 @@
                   <a href="?view=show" data-spa>show</a> |
                   <a href="?view=jobs" data-spa>jobs</a> |
                   <a href="?view=query" data-spa>query</a> |
-                  <a href="#" id="me-link">me</a>
+                  <a href="?view=me" data-spa id="me-link">me</a>
                   <span id="status-mid"></span>
                 </span>
               </div>
@@ -2528,6 +2528,143 @@
     })();
   }
 
+  async function renderMeView(token = 0) {
+    setStatus('Enter your HN username to view your activity for this day.');
+    const stored = getMeUser();
+    const warpInput = getWarpInputs()[0];
+    const defaultIso = warpInput?.value
+      || (currentReferenceTime ? formatISODateUTC(currentReferenceTime)
+      : (manifest?.snapshot_time ? formatISODateUTC(manifest.snapshot_time) : ''));
+
+    const safeValue = String(stored || '').replace(/"/g, '&quot;');
+
+    tableEl.innerHTML = `
+      <tr><td style="padding:10px">
+        <div class="subtext">Your HN activity for the current day (uses the date picker above).</div>
+      </td></tr>
+      <tr><td style="padding:0 10px 8px 10px">
+        <label class="subtext" for="me-input" style="margin-right:6px">Username</label>
+        <input id="me-input" class="warp-input top" style="max-width:200px" value="${safeValue}" placeholder="hnuser">
+        <button class="time-step" id="me-run" type="button" style="margin-left:6px">LOAD</button>
+        <div class="subtext" id="me-status" style="margin-top:4px; color:#666;"></div>
+      </td></tr>
+      <tr><td style="padding:0 10px 12px 10px">
+        <div id="me-results"><div class="loading">Enter a username to see your posts.</div></div>
+      </td></tr>
+    `;
+
+    const inputEl = document.getElementById('me-input');
+    const runBtn = document.getElementById('me-run');
+    const statusEl = document.getElementById('me-status');
+    const resultsEl = document.getElementById('me-results');
+
+    const getDayIso = () => {
+      const warpVal = getWarpInputs()[0]?.value;
+      return warpVal || defaultIso || '';
+    };
+
+    const renderRows = (rows = []) => {
+      if (!rows.length) {
+        resultsEl.innerHTML = `<div class="loading">No activity for this day.</div>`;
+        return;
+      }
+      const html = rows.map(r => {
+        const title = decodeEntities(r.title || '[untitled]');
+        const url = r.url ? decodeEntities(r.url) : `?view=item&id=${r.id}`;
+        const site = r.url ? hostFromUrl(url) : '';
+        const type = r.type || '';
+        const timeStr = formatAbsoluteTime(r.time);
+        return `
+          <div style="margin-bottom:10px">
+            <div class="titleline">
+              ${r.url
+                ? `<a href="${url}">${title}</a>`
+                : `<a href="?view=item&id=${r.id}" onclick="nav({view:'item',id:${r.id}});return false;">${title}</a>`}
+              ${site ? `<span class="sitebit comhead"> (<span class="sitestr">${site}</span>)</span>` : ``}
+            </div>
+            <div class="subtext">
+              <span style="text-transform:capitalize">${type}</span> • ${timeStr} •
+              <a href="?view=item&id=${r.id}" onclick="nav({view:'item',id:${r.id}});return false;">permalink</a>
+            </div>
+          </div>
+        `;
+      }).join('');
+      resultsEl.innerHTML = html;
+    };
+
+    const loadActivity = async () => {
+      if (!inputEl || !statusEl || !resultsEl) return;
+      const uname = String(inputEl.value || '').trim();
+      setMeUser(uname);
+      if (!uname) {
+        statusEl.textContent = 'Enter a username.';
+        resultsEl.innerHTML = `<div class="loading">Waiting for username…</div>`;
+        return;
+      }
+
+      const iso = getDayIso();
+      const dayStart = parseISODateUTC(iso, false);
+      const dayEnd = parseISODateUTC(iso, true);
+      if (!dayStart || !dayEnd) {
+        statusEl.textContent = 'Pick a date first.';
+        resultsEl.innerHTML = `<div class="loading">Pick a date to see your activity.</div>`;
+        return;
+      }
+
+      statusEl.textContent = 'Scanning…';
+      resultsEl.innerHTML = `<div class="loading">Loading…</div>`;
+
+      const candidateShards = (timeShards || []).filter(s => {
+        const tmin = s.tmin || 0;
+        const tmax = s.tmax || 0;
+        return tmin <= dayEnd && tmax >= dayStart;
+      });
+      const sids = candidateShards.length
+        ? candidateShards.map(s => s.sid).sort((a, b) => b - a)
+        : latestShardSids(1);
+
+      const rows = [];
+      let scanned = 0;
+      for (const sid of sids) {
+        if (token && token !== routeToken) return;
+        const db = await loadShardBySid(sid);
+        scanned += 1;
+        if (!db) continue;
+        const shardRows = sqlAll(db, `
+          SELECT id,type,time,title,url,score FROM items
+          WHERE by=? COLLATE NOCASE AND time BETWEEN ${dayStart} AND ${dayEnd}
+          ORDER BY time DESC
+          LIMIT 200
+        `, [uname]);
+        rows.push(...shardRows);
+        statusEl.textContent = `Scanning shards ${scanned}/${sids.length}…`;
+        if (rows.length >= 400) break;
+      }
+
+      rows.sort((a, b) => (b.time || 0) - (a.time || 0));
+      renderRows(rows);
+      statusEl.textContent = rows.length
+        ? `${rows.length} item(s) on ${iso}`
+        : `No activity for ${iso}`;
+      if (!statusHoldUntil || Date.now() >= statusHoldUntil) setStatus('');
+    };
+
+    if (runBtn) runBtn.addEventListener('click', loadActivity);
+    if (inputEl) {
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          loadActivity();
+        }
+      });
+    }
+
+    if (stored) {
+      // Let the UI paint first before loading.
+      requestAnimationFrame(() => loadActivity());
+    }
+  }
+
   // -----------------------
   // Router
   // -----------------------
@@ -2588,6 +2725,14 @@
       currentThreadId = null;
       clearResumeStates();
       await renderUserView(id, token);
+      initialRoute = false;
+      return;
+    }
+
+    if (view === 'me') {
+      currentThreadId = null;
+      clearResumeStates();
+      await renderMeView(token);
       initialRoute = false;
       return;
     }
@@ -2733,20 +2878,6 @@
           const iso = formatISODateUTC(targetShard.tmin || targetShard.tmax || timeRange.min);
           setWarpInputs(iso);
           nav({ view: 'news', p: 1, warp: targetShard.sid, warp_date: iso, id: null });
-        });
-      }
-
-      if (meLink) {
-        meLink.addEventListener('click', (e) => {
-          e.preventDefault();
-          const current = getMeUser();
-          const input = prompt('Enter your HN username', current);
-          if (input === null) return;
-          const trimmed = String(input || '').trim();
-          setMeUser(trimmed);
-          if (trimmed) {
-            nav({ view: 'user', id: trimmed });
-          }
         });
       }
 
