@@ -31,6 +31,7 @@ Always run `npm install` once in the repo root.
 **Cache behavior**
 - HTML uses a cache-bust string for manifest/index URLs.
 - Shards are immutable by filename; if data changes, the hash changes so clients fetch the new shard.
+- Content hashing guarantees cache correctness: the gz shard filename embeds a SHA-256 hash (12 hex chars), so any byte-level change produces a new URL.
 
 ## Pipeline overview
 1) **Raw data**: BigQuery exports in `data/raw/*.json.gz` (or `toool/data/raw/`).
