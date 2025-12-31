@@ -652,8 +652,6 @@
   let listRetryCount = 0;
   const shardInFlight = new Map();
   const timeIndexBySid = new Map();
-  const yearRowCache = new Map();
-  const YEAR_CACHE_LIMIT = 9000;
 
   const statusRightEl = document.getElementById('status-right');
   const statusMidEl = document.getElementById('status-mid');
@@ -867,28 +865,6 @@
     fileLoadPending = null;
   }
 
-  function yearCacheKey(year, view, sids) {
-    if (!year || !Array.isArray(sids) || !sids.length) return null;
-    return `${year}|${view}|${sids.join(',')}`;
-  }
-
-  function getYearCache(key) {
-    if (!key || !yearRowCache.has(key)) return null;
-    const entry = yearRowCache.get(key);
-    yearRowCache.delete(key);
-    yearRowCache.set(key, entry);
-    return entry;
-  }
-
-  function setYearCache(key, rows) {
-    if (!key || !rows) return;
-    const slim = rows.length > YEAR_CACHE_LIMIT ? rows.slice(0, YEAR_CACHE_LIMIT) : rows.slice();
-    yearRowCache.set(key, slim);
-    while (yearRowCache.size > 3) {
-      const oldestKey = yearRowCache.keys().next().value;
-      yearRowCache.delete(oldestKey);
-    }
-  }
 
   function setReferenceTime(ts, updateHeader = true) {
     const next = Number(ts) || 0;
@@ -927,7 +903,6 @@
   }
 
   function qs() { return new URLSearchParams(location.search); }
-  function isDebug() { return qs().get('debug') === '1'; }
   function isDebug() { return qs().get('debug') === '1'; }
 
   function nav(params) {
@@ -1721,17 +1696,12 @@
     }
 
     clearStatus();
-    const cacheKey = yearRange ? yearCacheKey(yearRange.year, view, sids) : null;
-    let all = yearRange ? (getYearCache(cacheKey) || []) : [];
-    const cachedHit = yearRange && all.length;
-    if (yearRange && isDebug()) {
-      console.log('[year]', { view, year: yearRange.year, shards: sids.length, cached: cachedHit });
-    }
-    setFileLoadTarget(cachedHit ? [] : sids);
+    setFileLoadTarget(sids);
     setStatus(STATUS_MESSAGES.SCRUB_LOADING);
+
+    let all = [];
     for (const sid of sids) {
       if (token && token !== routeToken) return;
-      if (cachedHit) break;
       const db = await loadShardBySid(sid);
       if (!db) continue;
 
@@ -1762,12 +1732,6 @@
       all.push(...rows);
 
       if (!yearRange && all.length > offset + ITEMS_PER_PAGE + 300) break;
-    }
-
-    if (yearRange && !cachedHit) {
-      setStatus({ text: 'Caching…' }, true);
-      setYearCache(cacheKey, all);
-      all = getYearCache(cacheKey) || all;
     }
 
     if (yearRange) setStatus({ text: 'Sorting…' }, true);
