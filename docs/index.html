@@ -2412,16 +2412,6 @@
       return;
     }
 
-    const topDomains = sqlAll(db, `
-      SELECT domain, count FROM user_domains
-      WHERE username=? COLLATE NOCASE ORDER BY count DESC, domain ASC LIMIT 8
-    `, [unameKey]);
-
-    const topMonths = sqlAll(db, `
-      SELECT month, count FROM user_months
-      WHERE username=? COLLATE NOCASE ORDER BY count DESC, month DESC LIMIT 8
-    `, [unameKey]);
-
     const first = formatAbsoluteTime(user.first_time);
     const last = formatAbsoluteTime(user.last_time);
     const spanDays = user.first_time && user.last_time ? Math.max(1, Math.round((user.last_time - user.first_time) / 86400)) : null;
@@ -2437,11 +2427,11 @@
           <tr><td class="record-label">User</td><td class="title">${uname}</td></tr>
           <tr><td class="record-label">First seen</td><td class="title">${first || 'n/a'}</td></tr>
           <tr><td class="record-label">Last seen</td><td class="title">${last || 'n/a'}</td></tr>
-          ${spanDays ? `<tr><td class="record-label">Active span</td><td class="title">${spanDays.toLocaleString('en-US')} days</td></tr>` : ``}
-          ${avgPerDay ? `<tr><td class="record-label">Avg items/day</td><td class="title">${avgPerDay}</td></tr>` : ``}
-          <tr><td class="record-label">Items</td><td class="title">${(user.items || 0).toLocaleString('en-US')}</td></tr>
-          <tr><td class="record-label">Comments</td><td class="title">${(user.comments || 0).toLocaleString('en-US')}</td></tr>
-          <tr><td class="record-label">Stories</td><td class="title">${(user.stories || 0).toLocaleString('en-US')}</td></tr>
+      ${spanDays ? `<tr><td class="record-label">Active span</td><td class="title">${spanDays.toLocaleString('en-US')} days</td></tr>` : ``}
+      ${avgPerDay ? `<tr><td class="record-label">Avg items/day</td><td class="title">${avgPerDay}</td></tr>` : ``}
+      <tr><td class="record-label">Items</td><td class="title">${(user.items || 0).toLocaleString('en-US')}</td></tr>
+      <tr><td class="record-label">Comments</td><td class="title">${(user.comments || 0).toLocaleString('en-US')}</td></tr>
+      <tr><td class="record-label">Stories</td><td class="title">${(user.stories || 0).toLocaleString('en-US')}</td></tr>
           <tr><td class="record-label">Ask</td><td class="title">${(user.ask || 0).toLocaleString('en-US')}</td></tr>
           <tr><td class="record-label">Show</td><td class="title">${(user.show || 0).toLocaleString('en-US')}</td></tr>
           <tr><td class="record-label">Launch</td><td class="title">${(user.launch || 0).toLocaleString('en-US')}</td></tr>
@@ -2452,23 +2442,75 @@
           ${user.max_score_id ? `<tr><td class="record-label">Best item</td><td class="title"><a href="?view=item&id=${user.max_score_id}" data-spa>${bestTitle}</a></td></tr>` : ``}
         </table>
       </td></tr>
-      ${topDomains.length ? `<tr><td style="padding:0 10px 12px 10px">
+      <tr id="user-top-domains-row"><td style="padding:0 10px 12px 10px">
         <div class="subtext" style="margin-bottom:6px">Top domains</div>
-        <table class="archive-table">
-          <tr><th>Domain</th><th>Count</th></tr>
-          ${topDomains.map(d => `<tr><td>${d.domain}</td><td>${d.count}</td></tr>`).join('')}
-        </table>
-      </td></tr>` : ``}
-      ${topMonths.length ? `<tr><td style="padding:0 10px 12px 10px">
+        <div class="loading">Loading…</div>
+      </td></tr>
+      <tr id="user-top-months-row"><td style="padding:0 10px 12px 10px">
         <div class="subtext" style="margin-bottom:6px">Top months</div>
-        <table class="archive-table">
-          <tr><th>Month</th><th>Count</th></tr>
-          ${topMonths.map(m => `<tr><td>${m.month}</td><td>${m.count}</td></tr>`).join('')}
-        </table>
-      </td></tr>` : ``}
+        <div class="loading">Loading…</div>
+      </td></tr>
     `;
 
-    setStatus('');
+    setStatus('Loading user stats…');
+
+    (async () => {
+      // Let the basic user table paint before running the heavier lookups.
+      await new Promise(r => requestAnimationFrame(() => r()));
+
+      const domRow = document.getElementById('user-top-domains-row');
+      const monthRow = document.getElementById('user-top-months-row');
+
+      const fetchDomains = (async () => {
+        try {
+          const topDomains = sqlAll(db, `
+            SELECT domain, count FROM user_domains
+            WHERE username=? COLLATE NOCASE ORDER BY count DESC, domain ASC LIMIT 8
+          `, [unameKey]);
+          if (token && token !== routeToken) return;
+          if (topDomains.length && domRow) {
+            domRow.innerHTML = `<td style="padding:0 10px 12px 10px">
+              <div class="subtext" style="margin-bottom:6px">Top domains</div>
+              <table class="archive-table">
+                <tr><th>Domain</th><th>Count</th></tr>
+                ${topDomains.map(d => `<tr><td>${d.domain}</td><td>${d.count}</td></tr>`).join('')}
+              </table>
+            </td>`;
+          } else if (domRow) {
+            domRow.remove();
+          }
+        } catch (err) {
+          if (domRow) domRow.innerHTML = `<td style="padding:0 10px 12px 10px"><div class="loading">Top domains not available.</div></td>`;
+        }
+      })();
+
+      const fetchMonths = (async () => {
+        try {
+          const topMonths = sqlAll(db, `
+            SELECT month, count FROM user_months
+            WHERE username=? COLLATE NOCASE ORDER BY count DESC, month DESC LIMIT 8
+          `, [unameKey]);
+          if (token && token !== routeToken) return;
+          if (topMonths.length && monthRow) {
+            monthRow.innerHTML = `<td style="padding:0 10px 12px 10px">
+              <div class="subtext" style="margin-bottom:6px">Top months</div>
+              <table class="archive-table">
+                <tr><th>Month</th><th>Count</th></tr>
+                ${topMonths.map(m => `<tr><td>${m.month}</td><td>${m.count}</td></tr>`).join('')}
+              </table>
+            </td>`;
+          } else if (monthRow) {
+            monthRow.remove();
+          }
+        } catch (err) {
+          if (monthRow) monthRow.innerHTML = `<td style="padding:0 10px 12px 10px"><div class="loading">Top months not available.</div></td>`;
+        }
+      })();
+
+      await Promise.allSettled([fetchDomains, fetchMonths]);
+
+      if (!statusHoldUntil || Date.now() >= statusHoldUntil) setStatus('');
+    })();
   }
 
   // -----------------------
