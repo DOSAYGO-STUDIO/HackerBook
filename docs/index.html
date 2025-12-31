@@ -625,6 +625,7 @@
   const userStatsInFlight = new Map();
   let timeShards = [];
   let timeRange = { min: null, max: null };
+  let latestShardTs = null;
   let timeControlsBound = false;
   let routeToken = 0;
   let currentThreadId = null;
@@ -1474,12 +1475,15 @@
     (archiveIndex?.shards || []).forEach(s => postsBySid.set(s.sid, s.posts || 0));
     timeShards = (manifest?.shards || []).map(s => {
       const eff = effMap.get(s.sid);
+      const tminCandidates = [eff?.tmin_eff, s.tmin_eff, s.tmin].filter(v => Number.isFinite(v) && v > 0);
+      const tmaxCandidates = [eff?.tmax_eff, s.tmax_eff, s.tmax].filter(v => Number.isFinite(v) && v > 0);
       return {
         sid: s.sid,
-        tmin: eff?.tmin_eff || s.tmin_eff || s.tmin || 0,
-        tmax: eff?.tmax_eff || s.tmax_eff || s.tmax || 0
+        tmin: tminCandidates.length ? Math.min(...tminCandidates) : 0,
+        tmax: tmaxCandidates.length ? Math.max(...tmaxCandidates) : 0
       };
     }).sort((a,b)=> (a.tmax||0) - (b.tmax||0) || (a.tmin||0) - (b.tmin||0));
+    latestShardTs = timeShards.length ? (timeShards[timeShards.length - 1].tmax || 0) : null;
     timeIndexBySid.clear();
     timeShards.forEach((s, i) => timeIndexBySid.set(s.sid, i));
     if (timeShards.length) {
@@ -3170,9 +3174,11 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
       loadCrossIndex();
       rebuildTimeIndex();
 
-      // Derive snapshot_time if not present (OG manifest has it; but be safe)
-      if (!manifest.snapshot_time) {
-        manifest.snapshot_time = (manifest.shards || []).reduce((m,s)=>Math.max(m, s.tmax||0), 0);
+      // Derive snapshot_time if missing or stale vs shard ranges.
+      const manifestMax = (manifest.shards || []).reduce((m,s)=>Math.max(m, s.tmax||0), 0);
+      const shardSnapshotTime = latestShardTs || manifestMax || 0;
+      if (!manifest.snapshot_time || (shardSnapshotTime && shardSnapshotTime > manifest.snapshot_time)) {
+        manifest.snapshot_time = shardSnapshotTime;
       }
       if (manifest.snapshot_time) {
         // Set warp input max to snapshot date
