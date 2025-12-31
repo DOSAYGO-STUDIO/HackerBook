@@ -1,6 +1,6 @@
-# Hacker Book — Archivist/Developer Handbook
+# Hacker Book - The unkillable, offline Hacker News archive
 
-Static, offline-friendly Hacker News archive shipped as plain files. Everything runs client-side in your browser via SQLite WASM; the browser only downloads the shards it needs.
+Community, all the HN belong to you. This repo packages 20 years of Hacker News into a **static** archive you can run entirely in your browser. The site is just files: HTML, JSON, and gzipped SQLite shards. No server app required.
 
 - Demo: https://hackerbook.dosaygo.com
 - Landing / download: https://dosaygo-studio.github.io/HackerBook/
@@ -8,29 +8,58 @@ Static, offline-friendly Hacker News archive shipped as plain files. Everything 
 
 ![Hacker Book front page](docs/assets/hn-home.png)
 
-**Screenshots**
-- Front page: `docs/assets/hn-home.png`
-- Query view: `docs/assets/hn-query.png`
-- Me view: `docs/assets/hn-me.png`
-
 > [!NOTE]
-> This is a fully static archive: no server-side app is required. The browser fetches only the shard files it needs.
+> This project is an archive and a toolkit: run it locally, mirror it, or build your own daily snapshots.
 
 ## Table of contents
-- Quick start
-- Concepts
-- User stats shards
-- Pipeline overview
-- Orchestration: predeploy
-- ETL: etl-hn.js
-- Index builders
-- Safe stop / resume
-- Deploy checklist
-- Contribute analysis
-- Notes
+- [What this is](#what-this-is)
+- [How it works](#how-it-works)
+- [Screenshots](#screenshots)
+- [Quick start](#quick-start)
+- [Repository layout](#repository-layout)
+- [Pipeline overview](#pipeline-overview)
+- [Restarting safely](#restarting-safely)
+- [Shards and content hashing](#shards-and-content-hashing)
+- [User stats shards](#user-stats-shards)
+- [Index builders](#index-builders)
+- [Deploy checklist](#deploy-checklist)
+- [Contribute analysis](#contribute-analysis)
+- [FAQ](#faq)
+- [Notes](#notes)
+
+## What this is
+A fully static Hacker News archive that runs **entirely in your browser** using SQLite compiled to WebAssembly. The browser fetches only the shard files it needs for the page you are viewing, so the initial load is tiny and navigation stays fast.
+
+> Community, all the HN belong to you. This is an archive of Hacker News that fits in your browser. The whole dataset. So they'll never die. Ever. It's the unkillable static archive of HN in your hands.
+
+Inspired by HN Made of Primes, this is the "year-end gift" to the community: keep a durable, offline-friendly HN archive forever.
+
+> [!TIP]
+> The "organizing idea": **ship data like a static website**. Everything is a file. Everything is cacheable. Everything is yours.
+
+## How it works
+- **SQLite WASM in the browser** runs queries client-side.
+- **The archive is sharded** into gzipped SQLite files so the browser can fetch only what it needs.
+- **Manifests and indexes** describe where shards live and what they contain.
+- **Content hashing** bakes a short SHA-256 into each shard filename for perfect cache correctness.
+
+> [!IMPORTANT]
+> The shards are immutable by filename. If content changes, the hash changes, and caches refresh automatically.
+
+## Screenshots
+**Query view**
+
+![Query view](docs/assets/hn-query.png)
+
+**Me view**
+
+![Me view](docs/assets/hn-me.png)
 
 ## Quick start
 Always run `npm install` once in the repo root.
+
+**Archivist workflow (the short version)**  
+BigQuery -> ETL -> `npx serve docs`
 
 **Build + prep everything**
 1) `./toool/s/predeploy-checks.sh [--use-staging] [--restart-etl] [--from-shards] [--hash-only]`
@@ -43,31 +72,15 @@ Always run `npm install` once in the repo root.
 > [!TIP]
 > Use `AUTO_RUN=1` for unattended pipeline runs.
 
-## Concepts
-**Shards**
-- `docs/static-shards/`: gzipped SQLite shards of items/comments.
-- Filenames are hashed: `shard_<sid>_<hash>.sqlite.gz` where `<hash>` is 12 hex chars (SHA-256 truncated).
-
-**Manifests & indexes**
-- `docs/static-manifest.json(.gz)`: shard metadata + snapshot time.
-- `docs/archive-index.json(.gz)`: per-shard stats + effective time range.
-- `docs/cross-shard-index.bin(.gz)`: parent->shard cross index.
-- `docs/static-user-stats-manifest.json(.gz)`: user stats shards.
-
-**Cache behavior**
-- HTML uses a cache-bust string for manifest/index URLs.
-- Shards are immutable by filename; if data changes, the hash changes so clients fetch the new shard.
-- Content hashing guarantees cache correctness: the gz shard filename embeds a SHA-256 hash (12 hex chars), so any byte-level change produces a new URL.
-
-## User stats shards
-User stats are separate shards optimized for usernames and monthly activity.
-
-- Location: `docs/static-user-stats-shards/`
-- Manifest: `docs/static-user-stats-manifest.json(.gz)`
-- Tables: `users`, `user_domains`, `user_months`
-- Built by: `node ./toool/s/build-user-stats.mjs --gzip --target-mb 15`
-
-The app switches to these shards for the `?view=me` and query mode when you select "User stats shards."
+## Repository layout
+- `docs/`: the static site (HTML, JS, CSS, manifests, indexes, shards)
+- `docs/static-shards/`: gzipped item/comment shards
+- `docs/static-user-stats-shards/`: user stats shards
+- `data/`: raw dumps + staging DB
+- `download_hn.sh`: BigQuery export helper
+- `etl-hn.js`: main shard builder + post-pass
+- `build-archive-index.js`: archive index builder
+- `toool/s/`: scripts for predeploy, index builds, downloads
 
 ## Pipeline overview
 1) **Raw data**: BigQuery exports in `data/raw/*.json.gz` (or `toool/data/raw/`).
@@ -77,7 +90,6 @@ The app switches to these shards for the `?view=me` and query mode when you sele
 5) **Indexes**: archive, cross-shard, user stats.
 6) **Deploy**: publish `docs/`.
 
-## Orchestration: predeploy
 `./toool/s/predeploy-checks.sh` runs the full pipeline with prompts.
 
 Flags:
@@ -87,44 +99,41 @@ Flags:
 - `--hash-only` with `--from-shards`, only normalize shard hashes (skip post-pass).
 - `AUTO_RUN=1` auto-advance prompts.
 
-What it does:
-- Downloads raw data if missing.
-- Runs ETL (or restarts post-pass).
-- Rebuilds indexes and gzips manifests.
-- Validates gzip assets and shard presence.
-
 > [!WARNING]
 > `--hash-only` assumes you already have gzipped shards. It will not gzip `.sqlite` files.
 
-## ETL: `etl-hn.js`
-Primary flags:
-- `--gzip` enable post-pass gzip + manifest rewrite.
-- `--restart` resume post-pass from existing shards/manifest.
-- `--rebuild-manifest` rebuild manifest from shards on disk.
-- `--from-staging` use `data/static-staging-hn.sqlite`.
-- `--data PATH` raw file directory.
-- `--post-concurrency N` post-pass concurrency.
-- `--keep-sqlite` keep `.sqlite` after gzip.
+## Restarting safely
+This pipeline is designed to tolerate interrupts.
 
-Restart behavior:
-- Uses `docs/static-manifest.json.prepass` if present.
-- Validates a tail slice of `.sqlite` + `.gz` shards before resuming.
-- Skips already-gzipped shards; only continues missing ones.
+- Kill only after a shard completes (`[shard N] ... file ...MB`).
+- If killed mid-gzip, restart with: `./toool/s/predeploy-checks.sh --restart-etl`.
+- The post-pass detects partial output and resumes from the last good shard.
 
-Hashing behavior:
-- Hashes are computed on the final `.sqlite.gz`.
-- Un-hashed `.sqlite.gz` are normalized to `shard_<sid>_<hash>.sqlite.gz`.
+## Shards and content hashing
+**Items/comments shards** live in `docs/static-shards/`.
+
+- Filenames are hashed: `shard_<sid>_<hash>.sqlite.gz`.
+- `<hash>` is 12 hex chars (SHA-256 truncated).
+- Hashing happens after VACUUM + gzip, so the hash represents the final bytes.
+
+Why this matters:
+- Cache correctness is automatic. If the shard changes, the URL changes.
+- Old shards can be cached forever (`immutable`), while new snapshots fetch cleanly.
+
+## User stats shards
+User stats are separate shards optimized for usernames and monthly activity.
+
+- Location: `docs/static-user-stats-shards/`
+- Manifest: `docs/static-user-stats-manifest.json(.gz)`
+- Tables: `users`, `user_domains`, `user_months`
+- Built by: `node ./toool/s/build-user-stats.mjs --gzip --target-mb 15`
+
+The app switches to these shards for the `?view=me` view and when you select "User stats shards" in query mode.
 
 ## Index builders
 - Archive index: `node ./build-archive-index.js`
 - Cross-shard index: `node ./toool/s/build-cross-shard-index.mjs --binary`
 - User stats: `node ./toool/s/build-user-stats.mjs --gzip --target-mb 15`
-
-## Safe stop / resume
-- Kill only after a shard completes (`[shard N] ... file ...MB`).
-- If killed mid-gzip, restart with:
-  `./toool/s/predeploy-checks.sh --restart-etl`
-- Temporary `*.gz.tmp` can be deleted if needed.
 
 ## Deploy checklist
 - `static-manifest.json(.gz)` updated and points to hashed shards.
@@ -134,10 +143,20 @@ Hashing behavior:
 - Cache-bust string bumped in `docs/index.html` and `docs/static.html`.
 
 ## Contribute analysis
-Have charts or analyses you want to feature? Email a link and a short caption to `hey@browserbox.io`.
+Have charts or analyses you want to feature? Email a link and a short caption to `hey@browserbox.io`. Bonus points for fresh takes and bold visualizations. 📊
+
+## FAQ
+**Is this really offline?**
+Yes. Once the shards you need are cached, browsing is offline. You can also download the whole site and run it locally. ✨
+
+**Why shards instead of HTTP Range requests?**
+Shards are friendlier to static hosting and cache behavior, and make it easier to reason about data integrity.
+
+**How big is it?**
+The full archive is ~9GB gzipped (~22GB uncompressed), split across ~1.6k shards.
 
 ## Notes
 - Works best on modern browsers (Chrome, Firefox, Safari) with `DecompressionStream`; falls back to pako gzip when needed.
-- Mobile: layout is locked to the viewport, and everything runs offline once the needed shards are cached.
-- The code for the viewer and ETL pipeline is released under the MIT License.
-- The content (Hacker News data) is property of Y Combinator and the respective comment authors.
+- Mobile layout is optimized for tap navigation and small screens.
+- Viewer and ETL code are MIT-licensed.
+- HN content remains property of Y Combinator and the respective authors.
