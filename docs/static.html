@@ -370,8 +370,15 @@
       .pagetop, .title { font-size: 12px; line-height: 1.4; }
       .subtext, .comhead { font-size: 10px; line-height: 1.3; }
       .commtext { font-size: 12px; line-height: 1.5; }
-      .ind { transform: scaleX(0.5); transform-origin: left; }
-      .commtext { max-width: 100%; margin-right: 10px; }
+      body[data-view="item"] { overflow-x: hidden; }
+      body[data-view="item"] #hnmain { overflow-x: hidden; }
+      body[data-view="item"] #content-table { width: 100%; table-layout: fixed; }
+      tr.comtr > td > table { width: 100%; table-layout: fixed; }
+      tr.comtr .ind { max-width: 80px; overflow: hidden; }
+      tr.comtr td.default { overflow: hidden; }
+      .commtext { max-width: 100%; margin-right: 0; overflow-wrap: anywhere; word-break: break-word; }
+      .commtext pre { max-width: 100%; overflow-x: auto; box-sizing: border-box; }
+      .commtext a { word-break: break-all; }
       #hnmain { width: 100% !important; }
       #status-right { display: block; }
       #status-mid { display: none; }
