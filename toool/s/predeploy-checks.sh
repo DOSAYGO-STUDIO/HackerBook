@@ -12,6 +12,7 @@ RAW_DIR_PRIMARY="${REPO_DIR}/data/raw"
 RAW_DIR_ALT="${REPO_DIR}/toool/data/raw"
 USE_STAGING=0
 RESTART_ETL=0
+FROM_SHARDS=0
 
 CUSTOM_DOMAIN="${CUSTOM_DOMAIN:-hnbackuptape.dosaygo.com}"
 EXPECTED_CNAME="${EXPECTED_CNAME:-static-news-dtg.pages.dev}"
@@ -22,11 +23,13 @@ for arg in "$@"; do
   case "${arg}" in
     --use-staging) USE_STAGING=1 ;;
     --restart-etl) RESTART_ETL=1 ;;
+    --from-shards) FROM_SHARDS=1 ;;
     -h|--help)
       cat <<'EOF'
-Usage: toool/s/predeploy-checks.sh [--use-staging] [--restart-etl]
+Usage: toool/s/predeploy-checks.sh [--use-staging] [--restart-etl] [--from-shards]
   --use-staging  Run ETL from ./data/static-staging-hn.sqlite and skip raw download
   --restart-etl  Resume ETL post-pass (vacuum/gzip) from existing shards/manifest
+  --from-shards  Skip ETL; normalize shard filenames and rebuild from existing shards
 EOF
       exit 0
       ;;
@@ -151,6 +154,53 @@ ensure_writable_or_backup() {
   log "[post] moved protected file to ${dest}"
 }
 
+hash_file_12() {
+  local path="${1}"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "${path}" | awk '{print substr($1,1,12)}'
+    return
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "${path}" | awk '{print substr($NF,1,12)}'
+    return
+  fi
+  fail "Missing hash tool: need shasum or openssl"
+}
+
+normalize_shard_hashes() {
+  local dir="${1}"
+  local backup_dir="${dir}/backups-${BACKUP_STAMP}"
+  mkdir -p "${backup_dir}"
+  local updated=0
+  for f in "${dir}"/shard_*.sqlite.gz; do
+    [[ -f "${f}" ]] || continue
+    local base
+    base="$(basename "${f}")"
+    if [[ "${base}" =~ ^shard_[0-9]+_[0-9a-f]{12}\.sqlite\.gz$ ]]; then
+      continue
+    fi
+    local sid
+    sid="$(printf "%s" "${base}" | sed -E 's/^shard_([0-9]+)\.sqlite\.gz$/\1/')"
+    if [[ -z "${sid}" || "${sid}" == "${base}" ]]; then
+      continue
+    fi
+    local hash
+    hash="$(hash_file_12 "${f}")"
+    local target="${dir}/shard_${sid}_${hash}.sqlite.gz"
+    if [[ -e "${target}" ]]; then
+      mv "${f}" "${backup_dir}/"
+    else
+      mv "${f}" "${target}"
+    fi
+    updated=$((updated+1))
+  done
+  if [[ "${updated}" -gt 0 ]]; then
+    pass "Normalized ${updated} shard filenames with hashes"
+  else
+    pass "Shard filenames already hashed"
+  fi
+}
+
 count_glob() {
   local pattern="${1}"
   local -a arr=()
@@ -251,6 +301,16 @@ if [[ "${RESTART_ETL}" -eq 1 ]]; then
   pass "Restarting ETL post-pass from existing shards"
   post_concurrency="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
   confirm_step "Restart ETL post-pass now? (etl-hn.js --restart --gzip)" in_repo node ./etl-hn.js --restart --gzip --post-concurrency "${post_concurrency}"
+elif [[ "${FROM_SHARDS}" -eq 1 ]]; then
+  shard_sqlite_count="$(count_glob "${DOCS_DIR}/static-shards/*.sqlite")"
+  shard_gz_count="$(count_glob "${DOCS_DIR}/static-shards/*.sqlite.gz")"
+  if [[ "${shard_sqlite_count}" -eq 0 && "${shard_gz_count}" -eq 0 ]]; then
+    fail "No shard files found for from-shards in ${DOCS_DIR}/static-shards"
+  fi
+  normalize_shard_hashes "${DOCS_DIR}/static-shards"
+  pass "Rebuilding from existing shards (post-pass + gzip)"
+  post_concurrency="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+  confirm_step "Finalize shards now? (etl-hn.js --restart --gzip)" in_repo node ./etl-hn.js --restart --gzip --post-concurrency "${post_concurrency}"
 elif [[ "${USE_STAGING}" -eq 1 ]]; then
   if [[ -f "${REPO_DIR}/data/static-staging-hn.sqlite" ]]; then
     pass "Using staging DB: ${REPO_DIR}/data/static-staging-hn.sqlite"
