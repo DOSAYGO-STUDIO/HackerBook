@@ -6,6 +6,24 @@ Static, offline-friendly Hacker News archive shipped as plain files. Everything 
 - Landing / download: https://dosaygo-studio.github.io/HackerBook/
 - Code: https://github.com/DOSAYGO-STUDIO/HackerBook
 
+![Hacker Book screenshot](docs/assets/hn-screenshot.png)
+
+> [!NOTE]
+> This is a fully static archive: no server-side app is required. The browser fetches only the shard files it needs.
+
+## Table of contents
+- Quick start
+- Concepts
+- User stats shards
+- Pipeline overview
+- Orchestration: predeploy
+- ETL: etl-hn.js
+- Index builders
+- Safe stop / resume
+- Deploy checklist
+- Contribute analysis
+- Notes
+
 ## Quick start
 Always run `npm install` once in the repo root.
 
@@ -16,6 +34,9 @@ Always run `npm install` once in the repo root.
 **Download the published site (no ETL)**
 1) `node toool/download-site.mjs [--base URL] [--out DIR] [--no-shards]`
 2) Serve the downloaded folder.
+
+> [!TIP]
+> Use `AUTO_RUN=1` for unattended pipeline runs.
 
 ## Concepts
 **Shards**
@@ -32,6 +53,16 @@ Always run `npm install` once in the repo root.
 - HTML uses a cache-bust string for manifest/index URLs.
 - Shards are immutable by filename; if data changes, the hash changes so clients fetch the new shard.
 - Content hashing guarantees cache correctness: the gz shard filename embeds a SHA-256 hash (12 hex chars), so any byte-level change produces a new URL.
+
+## User stats shards
+User stats are separate shards optimized for usernames and monthly activity.
+
+- Location: `docs/static-user-stats-shards/`
+- Manifest: `docs/static-user-stats-manifest.json(.gz)`
+- Tables: `users`, `user_domains`, `user_months`
+- Built by: `node ./toool/s/build-user-stats.mjs --gzip --target-mb 15`
+
+The app switches to these shards for the `?view=me` and query mode when you select "User stats shards."
 
 ## Pipeline overview
 1) **Raw data**: BigQuery exports in `data/raw/*.json.gz` (or `toool/data/raw/`).
@@ -56,6 +87,9 @@ What it does:
 - Runs ETL (or restarts post-pass).
 - Rebuilds indexes and gzips manifests.
 - Validates gzip assets and shard presence.
+
+> [!WARNING]
+> `--hash-only` assumes you already have gzipped shards. It will not gzip `.sqlite` files.
 
 ## ETL: `etl-hn.js`
 Primary flags:
