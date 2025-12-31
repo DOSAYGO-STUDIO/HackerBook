@@ -283,10 +283,35 @@ else
     fi
   fi
 
-  confirm_step "Run full ETL now? (etl-hn.js --gzip)" in_repo node ./etl-hn.js --gzip --data "${RAW_DIR}"
+confirm_step "Run full ETL now? (etl-hn.js --gzip)" in_repo node ./etl-hn.js --gzip --data "${RAW_DIR}"
 fi
 
-confirm_step "Rebuild archive index now? (build-archive-index.js)" in_repo node ./build-archive-index.js
+should_rebuild_archive_index() {
+  local manifest_json="${DOCS_DIR}/static-manifest.json"
+  local manifest_gz="${DOCS_DIR}/static-manifest.json.gz"
+  local archive_json="${DOCS_DIR}/archive-index.json"
+  if [[ ! -f "${archive_json}" ]]; then
+    return 0
+  fi
+  local manifest_ref=""
+  if [[ -f "${manifest_json}" ]]; then
+    manifest_ref="${manifest_json}"
+  elif [[ -f "${manifest_gz}" ]]; then
+    manifest_ref="${manifest_gz}"
+  else
+    return 0
+  fi
+  if [[ "${manifest_ref}" -nt "${archive_json}" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+if should_rebuild_archive_index; then
+  confirm_step "Rebuild archive index now? (build-archive-index.js)" in_repo node ./build-archive-index.js
+else
+  pass "Archive index newer than manifest; skipping rebuild"
+fi
 confirm_step "Gzip archive-index.json (-9)" gzip_replace "${DOCS_DIR}/archive-index.json" "${DOCS_DIR}/archive-index.json.gz"
 
 confirm_step "Rebuild cross-shard index now? (build-cross-shard-index.mjs --binary)" in_repo node ./toool/s/build-cross-shard-index.mjs --binary
