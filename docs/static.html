@@ -653,6 +653,11 @@
   const shardInFlight = new Map();
   const timeIndexBySid = new Map();
 
+  // Year-view cache: stores query results to avoid re-hitting all shards when switching views
+  // Key: `${year}|${view}` e.g. "2024|news", Value: { rows: [...], commentCounts: Map, ts: timestamp }
+  const yearViewCache = new Map();
+  const YEAR_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   const statusRightEl = document.getElementById('status-right');
   const statusMidEl = document.getElementById('status-mid');
   const snapInfoEl = document.getElementById('snapInfo');
@@ -1653,6 +1658,28 @@
     return timeShards[idx];
   }
 
+  // Filter year cache items by view type
+  function filterYearItemsByView(items, view) {
+    if (view === 'jobs') {
+      return items.filter(r => r.type === 'job');
+    }
+    const stories = items.filter(r => r.type === 'story');
+    if (view === 'ask') {
+      return stories.filter(r => {
+        const t = r.title || '';
+        return t.startsWith('Ask HN:') || t.startsWith('Ask HN ');
+      });
+    }
+    if (view === 'show') {
+      return stories.filter(r => {
+        const t = r.title || '';
+        return t.startsWith('Show HN:') || t.startsWith('Show HN ');
+      });
+    }
+    // news, newest - all stories
+    return stories;
+  }
+
   async function listView(view, page, warpSid = null, warpDate = null, year = null, token = 0) {
     const offset = (page - 1) * ITEMS_PER_PAGE;
     const scoreSortViews = new Set(['news', 'ask', 'show', 'jobs']);
@@ -1669,6 +1696,28 @@
           ? ((timeIndexBySid.has(warpSid) ? timeShards[timeIndexBySid.get(warpSid)]?.tmax : null) || snapshotRef || manifest.snapshot_time)
           : (snapshotRef || manifest.snapshot_time)));
     const cutoff = (!yearRange && referenceTime) ? (referenceTime - SCORE_SORT_HORIZON_DAYS * 86400) : 0;
+
+    // Year view cache: check if we have cached data for this year
+    if (yearRange) {
+      const cacheKey = String(yearRange.year);
+      const cached = yearViewCache.get(cacheKey);
+      if (cached && (Date.now() - cached.ts) < YEAR_CACHE_TTL_MS) {
+        // Use cached data - filter by view and paginate
+        setStatus({ text: 'Loading from cache…' }, true);
+        let filtered = filterYearItemsByView(cached.items, view);
+        if (isScoreSorted) filtered.sort((a,b) => (b.score||0)-(a.score||0) || (b.time||0)-(a.time||0));
+        else filtered.sort((a,b) => (b.time||0)-(a.time||0));
+        const pageRows = filtered.slice(offset, offset + ITEMS_PER_PAGE);
+
+        // Comment counts from cache
+        const commentCounts = cached.commentCounts;
+        if (referenceTime) setReferenceTime(referenceTime, true);
+        clearStatus();
+        renderList(pageRows, view, page, offset, commentCounts, yearRange.year);
+        holdStatus(STATUS_MESSAGES.SCRUB_COMPLETE);
+        return;
+      }
+    }
 
     // If warped to a specific date, scan shards in the time window
     // Otherwise use the shard index with a small radius
@@ -1707,30 +1756,76 @@
       let where = `type='story'`;
       let order = `ORDER BY time DESC`;
 
-      if (view === 'news') order = `ORDER BY score DESC, time DESC`;
-      if (view === 'newest') order = `ORDER BY time DESC`;
-      if (view === 'ask') where += ` AND (title LIKE 'Ask HN:%' OR title LIKE 'Ask HN %')`;
-      if (view === 'show') where += ` AND (title LIKE 'Show HN:%' OR title LIKE 'Show HN %')`;
-      if (view === 'jobs') where = `type='job'`;
+      // For year view, fetch ALL stories and jobs to cache them
       if (yearRange) {
-        where += ` AND time >= ${yearRange.start} AND time <= ${yearRange.end}`;
+        where = `(type='story' OR type='job') AND time >= ${yearRange.start} AND time <= ${yearRange.end}`;
       } else {
+        if (view === 'news') order = `ORDER BY score DESC, time DESC`;
+        if (view === 'newest') order = `ORDER BY time DESC`;
+        if (view === 'ask') where += ` AND (title LIKE 'Ask HN:%' OR title LIKE 'Ask HN %')`;
+        if (view === 'show') where += ` AND (title LIKE 'Show HN:%' OR title LIKE 'Show HN %')`;
+        if (view === 'jobs') where = `type='job'`;
         if (isScoreSorted && cutoff) where += ` AND time >= ${cutoff}`;
         if (warpDate && referenceTime) where += ` AND time <= ${referenceTime}`;
+        if (isScoreSorted && view !== 'news') order = `ORDER BY score DESC, time DESC`;
       }
-      if (isScoreSorted && view !== 'news') order = `ORDER BY score DESC, time DESC`;
 
       const rows = sqlAll(db, `
         SELECT id,type,by,time,title,url,score
         FROM items
         WHERE ${where}
         ${order}
-        LIMIT 250
+        LIMIT ${yearRange ? 5000 : 250}
       `);
 
       all.push(...rows);
 
       if (!yearRange && all.length > offset + ITEMS_PER_PAGE + 300) break;
+    }
+
+    // For year view, cache ALL items before filtering
+    if (yearRange) {
+      setStatus({ text: 'Caching year data…' }, true);
+      // Build comment counts for ALL items in the year
+      const allCommentCounts = new Map();
+      const allIds = all.map(r => r.id);
+      const allIdsBySid = new Map();
+      for (const id of allIds) {
+        const rec = shardRecForId(id);
+        if (!rec) continue;
+        if (!allIdsBySid.has(rec.sid)) allIdsBySid.set(rec.sid, []);
+        allIdsBySid.get(rec.sid).push(Number(id));
+      }
+      for (const [sid, ids] of allIdsBySid.entries()) {
+        if (token && token !== routeToken) return;
+        const db = await loadShardBySid(sid);
+        if (!db) continue;
+        // Query in batches to avoid huge IN clauses
+        const batchSize = 500;
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          const placeholders = batch.map(() => '?').join(',');
+          const counts = sqlAll(db, `
+            SELECT parent_id, COUNT(*) as cnt FROM edges
+            WHERE parent_id IN (${placeholders})
+            GROUP BY parent_id
+          `, batch);
+          for (const c of counts) {
+            allCommentCounts.set(c.parent_id, (allCommentCounts.get(c.parent_id) || 0) + c.cnt);
+          }
+        }
+      }
+
+      // Store in cache
+      const cacheKey = String(yearRange.year);
+      yearViewCache.set(cacheKey, {
+        items: all,
+        commentCounts: allCommentCounts,
+        ts: Date.now()
+      });
+
+      // Now filter for current view
+      all = filterYearItemsByView(all, view);
     }
 
     if (yearRange) setStatus({ text: 'Sorting…' }, true);
@@ -1740,28 +1835,34 @@
     const pageRows = all.slice(offset, offset + ITEMS_PER_PAGE);
 
     // Get comment counts (direct children only - shows as "N+ comments")
-    if (yearRange) setStatus({ text: 'Querying comments…' }, true);
-    const commentCounts = new Map();
-    const storyIds = pageRows.map(r => r.id);
-    const idsBySid = new Map();
-    for (const id of storyIds) {
-      const rec = shardRecForId(id);
-      if (!rec) continue;
-      if (!idsBySid.has(rec.sid)) idsBySid.set(rec.sid, []);
-      idsBySid.get(rec.sid).push(Number(id));
-    }
-    for (const [sid, ids] of idsBySid.entries()) {
-      if (token && token !== routeToken) return;
-      const db = await loadShardBySid(sid);
-      if (!db) continue;
-      const placeholders = ids.map(() => '?').join(',');
-      const counts = sqlAll(db, `
-        SELECT parent_id, COUNT(*) as cnt FROM edges
-        WHERE parent_id IN (${placeholders})
-        GROUP BY parent_id
-      `, ids);
-      for (const c of counts) {
-        commentCounts.set(c.parent_id, (commentCounts.get(c.parent_id) || 0) + c.cnt);
+    let commentCounts;
+    if (yearRange) {
+      // Use the cached comment counts
+      commentCounts = yearViewCache.get(String(yearRange.year))?.commentCounts || new Map();
+    } else {
+      if (yearRange) setStatus({ text: 'Querying comments…' }, true);
+      commentCounts = new Map();
+      const storyIds = pageRows.map(r => r.id);
+      const idsBySid = new Map();
+      for (const id of storyIds) {
+        const rec = shardRecForId(id);
+        if (!rec) continue;
+        if (!idsBySid.has(rec.sid)) idsBySid.set(rec.sid, []);
+        idsBySid.get(rec.sid).push(Number(id));
+      }
+      for (const [sid, ids] of idsBySid.entries()) {
+        if (token && token !== routeToken) return;
+        const db = await loadShardBySid(sid);
+        if (!db) continue;
+        const placeholders = ids.map(() => '?').join(',');
+        const counts = sqlAll(db, `
+          SELECT parent_id, COUNT(*) as cnt FROM edges
+          WHERE parent_id IN (${placeholders})
+          GROUP BY parent_id
+        `, ids);
+        for (const c of counts) {
+          commentCounts.set(c.parent_id, (commentCounts.get(c.parent_id) || 0) + c.cnt);
+        }
       }
     }
 
