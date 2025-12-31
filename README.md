@@ -190,6 +190,13 @@ graph TD
 - **`static-user-stats-manifest.json`**: The directory for user data. It maps alphabetical ranges of usernames (e.g., "a" to "az") to specific user-stats shards, enabling fast lookups for the "Me" view.
 - **`cross-shard-index.bin`**: A compact binary index (not JSON) that maps `parent_id` to a list of `shard_id`s. This solves the "scattered conversation" problem: if a story is in Shard A, but comments are added months later in Shard B and C, this index tells the client exactly which shards to fetch to load the full thread.
 
+### Cross-shard index binary layout
+The `cross-shard-index.bin` file uses a custom binary format for compactness (CSR-style):
+- **Header (24 bytes)**: `CSHX` (magic), Version (u32), Parents Count (u32), Links Count (u32), Shard Count (u32), Reserved (u32).
+- **Parent IDs**: Sorted array of `uint32` parent IDs (`parents_count * 4` bytes).
+- **Offsets**: Array of `uint32` indices pointing into the Links array (`(parents_count + 1) * 4` bytes).
+- **Links**: Array of `uint16` shard IDs (`links_count * 2` bytes).
+
 ### SQLite schema (items/edges)
 ```
 items(
