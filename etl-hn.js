@@ -26,6 +26,8 @@ const { execSync } = require("child_process");
 const readline = require("readline");
 const Database = require("better-sqlite3");
 
+const BACKUP_STAMP = new Date().toISOString().replace(/[:.]/g, "-");
+
 // -------------------- CLI --------------------
 function parseArgs(argv) {
   const out = {};
@@ -120,6 +122,20 @@ function isoUTC(sec) {
 function spanDaysFloat(tmin, tmax) {
   if (tmin == null || tmax == null) return 0;
   return (tmax - tmin) / 86400;
+}
+
+function ensureWritableOrBackup(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  try {
+    fs.accessSync(filePath, fs.constants.W_OK);
+    return;
+  } catch {}
+  const dir = path.dirname(filePath);
+  const backupDir = path.join(dir, `backups-${BACKUP_STAMP}`);
+  fs.mkdirSync(backupDir, { recursive: true });
+  const dest = path.join(backupDir, path.basename(filePath));
+  fs.renameSync(filePath, dest);
+  console.log(`[post] moved protected file to ${dest}`);
 }
 
 function gzipFileSync(srcPath, dstPath) {
@@ -265,6 +281,7 @@ async function rebuildManifestFromShards() {
   }
 
   out.snapshot_time = globalTmax;
+  ensureWritableOrBackup(MANIFEST_PATH);
   fs.writeFileSync(MANIFEST_PATH, JSON.stringify(out, null, 2));
   console.log(`[rebuild] Wrote manifest: ${MANIFEST_PATH}`);
   return out;
@@ -597,6 +614,7 @@ async function main() {
         const raw = zlib.gunzipSync(gz);
         const manifest = JSON.parse(raw.toString("utf8"));
         const finalManifest = await vacuumAndGzipAllShards(manifest, { restart: true });
+        ensureWritableOrBackup(MANIFEST_PATH);
         fs.writeFileSync(MANIFEST_PATH, JSON.stringify(finalManifest, null, 2));
         console.log(`\n[3/3] Wrote manifest: ${MANIFEST_PATH}`);
         if (RUN_ARCHIVE_INDEX) {
@@ -616,6 +634,7 @@ async function main() {
     }
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     const finalManifest = await vacuumAndGzipAllShards(manifest, { restart: true });
+    ensureWritableOrBackup(MANIFEST_PATH);
     fs.writeFileSync(MANIFEST_PATH, JSON.stringify(finalManifest, null, 2));
     console.log(`\n[3/3] Wrote manifest: ${MANIFEST_PATH}`);
     if (RUN_ARCHIVE_INDEX) {
@@ -918,12 +937,14 @@ async function main() {
   console.log(`[build] global end:   ${globalTmax} (${isoUTC(globalTmax)})`);
 
   // Write pre-pass manifest immediately so we can restart after interruption.
+  ensureWritableOrBackup(`${MANIFEST_PATH}.prepass`);
   fs.writeFileSync(`${MANIFEST_PATH}.prepass`, JSON.stringify(manifest, null, 2));
   console.log(`\n[2/3] Wrote prepass manifest: ${MANIFEST_PATH}.prepass`);
 
   // Post-pass: VACUUM + gzip (and rewrite manifest)
   const finalManifest = await vacuumAndGzipAllShards(manifest);
 
+  ensureWritableOrBackup(MANIFEST_PATH);
   fs.writeFileSync(MANIFEST_PATH, JSON.stringify(finalManifest, null, 2));
   console.log(`\n[3/3] Wrote manifest: ${MANIFEST_PATH}`);
 

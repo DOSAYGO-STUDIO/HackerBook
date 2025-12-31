@@ -12,6 +12,8 @@ import os from 'os';
 import zlib from 'zlib';
 import Database from 'better-sqlite3';
 
+const BACKUP_STAMP = new Date().toISOString().replace(/[:.]/g, '-');
+
 const DEFAULT_MANIFEST = 'docs/static-manifest.json';
 const DEFAULT_SHARDS_DIR = 'docs/static-shards';
 const DEFAULT_OUT_DIR = 'docs/static-user-stats-shards';
@@ -78,6 +80,20 @@ function gzipFileSync(srcPath, dstPath) {
   fs.writeFileSync(tmpPath, gz);
   fs.renameSync(tmpPath, dstPath);
   return gz.length;
+}
+
+function ensureWritableOrBackup(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  try {
+    fs.accessSync(filePath, fs.constants.W_OK);
+    return;
+  } catch {}
+  const dir = path.dirname(filePath);
+  const backupDir = path.join(dir, `backups-${BACKUP_STAMP}`);
+  fs.mkdirSync(backupDir, { recursive: true });
+  const dest = path.join(backupDir, path.basename(filePath));
+  fs.renameSync(filePath, dest);
+  console.log(`[post] moved protected file to ${dest}`);
 }
 
 function validateGzipFileSync(gzPath) {
@@ -502,6 +518,7 @@ async function main() {
       .sort((a, b) => a[0].localeCompare(b[0]));
     out.user_active = activeMonths.map(([month, active_users]) => ({ month, active_users }));
 
+    ensureWritableOrBackup(outManifest);
     fs.writeFileSync(outManifest, JSON.stringify(out, null, 2));
     console.log(`Wrote ${outManifest}`);
     if (gzipOut) {

@@ -1552,7 +1552,10 @@
       sids = [];
       for (let i = hi; i >= lo; i--) sids.push(timeShards[i].sid);
     } else {
-      sids = latestShardSids(LIST_SHARDS_TO_SCAN);
+      const inWindow = referenceTime
+        ? timeShards.filter(s => (s.tmax || 0) >= cutoff && (s.tmin || 0) <= referenceTime)
+        : [];
+      sids = inWindow.length ? inWindow.map(s => s.sid).reverse() : latestShardSids(LIST_SHARDS_TO_SCAN);
     }
 
     clearStatus();
