@@ -1726,12 +1726,14 @@
       if (!yearRange && all.length > offset + ITEMS_PER_PAGE + 300) break;
     }
 
+    if (yearRange) setStatus({ text: 'Sorting…' }, true);
     if (isScoreSorted) all.sort((a,b) => (b.score||0)-(a.score||0) || (b.time||0)-(a.time||0));
     else all.sort((a,b) => (b.time||0)-(a.time||0));
 
     const pageRows = all.slice(offset, offset + ITEMS_PER_PAGE);
 
     // Get comment counts (direct children only - shows as "N+ comments")
+    if (yearRange) setStatus({ text: 'Querying comments…' }, true);
     const commentCounts = new Map();
     const storyIds = pageRows.map(r => r.id);
     for (const sid of sids) {
@@ -1751,6 +1753,7 @@
       }
     }
 
+    if (yearRange) setStatus({ text: 'Aggregating…' }, true);
     if (token && token !== routeToken) return;
     const retryKey = `${view}|${page}|${warpSid ?? ''}|${warpDate ?? ''}|${yearRange ? yearRange.year : ''}`;
     if (!pageRows.length) {
@@ -1828,6 +1831,7 @@
     clearStatus();
     renderList(pageRows, view, page, offset, commentCounts, yearRange ? yearRange.year : null);
     clearFileLoadTarget();
+    if (yearRange) holdStatus(STATUS_MESSAGES.SCRUB_COMPLETE);
 
     if (lastWarpSid != null && lastWarpDirection !== 0) {
       prefetchAdjacentShard(lastWarpSid, lastWarpDirection);
