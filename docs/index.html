@@ -524,13 +524,16 @@
             <td class="nav-cell">
               <div class="nav-wrap">
                 <span class="pagetop">
-                  <b class="hnname"><a href="?view=news" data-spa id="home-link" title="Go to the most recent snapshot">Hacker Book</a></b>
+                  <b class="hnname"><a href="?view=news" data-spa data-year-clear="1" id="home-link" title="Go to the most recent snapshot">Hacker Book</a></b>
                   <a href="?view=newest" data-spa>new</a> |
                   <a href="?view=news" data-spa>front</a> |
                   <a href="#" id="start-link" title="Go to the first day">start</a> |
                   <a href="?view=ask" data-spa>ask</a> |
                   <a href="?view=show" data-spa>show</a> |
                   <a href="?view=jobs" data-spa>jobs</a> |
+                  <a href="?view=news&year=latest" data-spa id="year-link">year</a>
+                  <select id="year-input" class="warp-input top" title="Year view" style="width:78px; margin:0 6px 0 4px;"></select>
+                  |
                   <a href="?view=query" data-spa>query</a> |
                   <a href="?view=me" data-spa id="me-link">me</a>
                   <span id="status-mid"></span>
@@ -541,7 +544,7 @@
               <span class="header-right">
                 <span class="date-row">
                   <span id="status-right" class="pagetop"></span>
-                  <a id="header-date" class="pagetop header-date" href="?view=news" data-spa>Someday, Month 00, 0000</a>
+                  <a id="header-date" class="pagetop header-date" href="?view=news" data-spa data-year-clear="1">Someday, Month 00, 0000</a>
                 </span>
                 <form class="warp-form top" onsubmit="return false;">
                   <button class="time-step" type="button" data-step="-1" title="Back 1 day">&lt;</button>
@@ -656,6 +659,9 @@
   const snapInfoEl = document.getElementById('snapInfo');
     const headerDateEl = document.getElementById('header-date');
   const statsInfoEl = document.getElementById('statsInfo');
+  let statsInfoBase = '';
+  const yearInputEl = document.getElementById('year-input');
+  const yearLinkEl = document.getElementById('year-link');
   const tableEl = document.getElementById('content-table');
   const meLink = document.getElementById('me-link');
 
@@ -849,19 +855,20 @@
     snapInfoEl.title = title;
     headerDateEl.textContent = nbsp(label);
     headerDateEl.title = title;
-    if (headerDateEl) {
-      headerDateEl.dataset.warpDate = iso;
-      headerDateEl.dataset.warpSid = shard ? String(shard.sid) : '';
-      const url = new URL(location.href);
-      url.searchParams.set('view', 'news');
-      url.searchParams.set('p', '1');
-      url.searchParams.set('warp_date', iso);
-      if (shard) url.searchParams.set('warp', String(shard.sid));
-      else url.searchParams.delete('warp');
-      url.searchParams.delete('id');
-      headerDateEl.setAttribute('href', url.pathname + url.search + url.hash);
+      if (headerDateEl) {
+        headerDateEl.dataset.warpDate = iso;
+        headerDateEl.dataset.warpSid = shard ? String(shard.sid) : '';
+        const url = new URL(location.href);
+        url.searchParams.set('view', 'news');
+        url.searchParams.set('p', '1');
+        url.searchParams.set('warp_date', iso);
+        if (shard) url.searchParams.set('warp', String(shard.sid));
+        else url.searchParams.delete('warp');
+        url.searchParams.delete('year');
+        url.searchParams.delete('id');
+        headerDateEl.setAttribute('href', url.pathname + url.search + url.hash);
+      }
     }
-  }
 
   function getWarpInputs() {
     return Array.from(document.querySelectorAll('.warp-date'));
@@ -881,6 +888,7 @@
     }
     if (!('warp' in params) && qs().get('warp')) url.searchParams.set('warp', qs().get('warp'));
     if (!('warp_date' in params) && qs().get('warp_date')) url.searchParams.set('warp_date', qs().get('warp_date'));
+    if (!('year' in params) && qs().get('year')) url.searchParams.set('year', qs().get('year'));
     history.pushState(params, '', url.toString());
     route();
   }
@@ -933,6 +941,7 @@
         const cur = qs();
         if (!u.searchParams.get('warp') && cur.get('warp')) u.searchParams.set('warp', cur.get('warp'));
         if (!u.searchParams.get('warp_date') && cur.get('warp_date')) u.searchParams.set('warp_date', cur.get('warp_date'));
+        if (!u.searchParams.get('year') && cur.get('year') && !a.dataset.yearClear) u.searchParams.set('year', cur.get('year'));
         history.pushState({}, '', u.toString());
         route();
       });
@@ -1039,6 +1048,80 @@
     return parseISODateUTC(iso, true) || manifest.snapshot_time || 0;
   }
 
+  function getSnapshotYear() {
+    const ref = getSnapshotReferenceTime();
+    if (!ref) return null;
+    return new Date(ref * 1000).getUTCFullYear();
+  }
+
+  function parseYearParam(value) {
+    if (!value) return null;
+    if (value === 'any') return null;
+    if (value === 'latest') return getSnapshotYear();
+    const year = Number(value);
+    if (!Number.isFinite(year) || year < 1970 || year > 3000) return null;
+    return Math.floor(year);
+  }
+
+  function getYearRange(year) {
+    if (!year) return null;
+    const start = Date.UTC(year, 0, 1) / 1000;
+    const end = Date.UTC(year + 1, 0, 1) / 1000 - 1;
+    let min = start;
+    let max = end;
+    if (timeRange.min && min < timeRange.min) min = timeRange.min;
+    if (timeRange.max && max > timeRange.max) max = timeRange.max;
+    if (min > max) return null;
+    return { year, start: min, end: max };
+  }
+
+  function setYearInputValue(year) {
+    if (!yearInputEl) return;
+    yearInputEl.value = year ? String(year) : 'any';
+  }
+
+  function goToYearView(rawValue) {
+    const year = parseYearParam(rawValue);
+    if (!year) {
+      nav({ year: null });
+      return;
+    }
+    const current = qs().get('view') || 'news';
+    const view = ['news','newest','ask','show','jobs'].includes(current) ? current : 'news';
+    nav({ view, p: 1, year, warp: null, warp_date: null, id: null });
+  }
+
+  function buildYearOptions() {
+    if (!yearInputEl) return;
+    yearInputEl.innerHTML = '';
+    const anyOpt = document.createElement('option');
+    anyOpt.value = 'any';
+    anyOpt.textContent = 'any';
+    yearInputEl.appendChild(anyOpt);
+
+    const snapYear = getSnapshotYear() || new Date().getUTCFullYear();
+    const maxYear = Math.max(snapYear + 1, 2026);
+    const minYear = 2006;
+    for (let y = maxYear; y >= minYear; y -= 1) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = String(y);
+      yearInputEl.appendChild(opt);
+    }
+  }
+
+  function updateYearInfo(yearRange) {
+    if (!statsInfoEl) return;
+    if (!statsInfoBase) statsInfoBase = statsInfoEl.textContent || '';
+    if (yearRange) {
+      statsInfoEl.textContent = statsInfoBase
+        ? `${statsInfoBase} · Year view: ${yearRange.year}`
+        : `Year view: ${yearRange.year}`;
+    } else {
+      statsInfoEl.textContent = statsInfoBase;
+    }
+  }
+
   function findShardForTs(targetTs) {
     const shards = manifest?.shards || [];
     let targetShard = shards.find(s => s.tmin <= targetTs && s.tmax >= targetTs);
@@ -1069,7 +1152,7 @@
       const view = ['news','newest','ask','show','jobs','me'].includes(current) ? current : 'news';
       const iso = formatISODateUTC(targetTs);
       setWarpInputs(iso);
-      nav({ view, warp: targetShard.sid, warp_date: iso });
+      nav({ view, warp: targetShard.sid, warp_date: iso, year: null });
     }
   }
 
@@ -1542,23 +1625,30 @@
     return timeShards[idx];
   }
 
-  async function listView(view, page, warpSid = null, warpDate = null, token = 0) {
+  async function listView(view, page, warpSid = null, warpDate = null, year = null, token = 0) {
     const offset = (page - 1) * ITEMS_PER_PAGE;
     const scoreSortViews = new Set(['news', 'ask', 'show', 'jobs']);
     const isScoreSorted = scoreSortViews.has(view);
+    const yearRange = year ? getYearRange(year) : null;
+    updateYearInfo(yearRange);
 
     const snapshotRef = getSnapshotReferenceTime();
-    const referenceTime = warpDate
-      ? parseISODateUTC(warpDate, true)
-      : (warpSid !== null
-        ? ((timeIndexBySid.has(warpSid) ? timeShards[timeIndexBySid.get(warpSid)]?.tmax : null) || snapshotRef || manifest.snapshot_time)
-        : (snapshotRef || manifest.snapshot_time));
-    const cutoff = referenceTime ? (referenceTime - SCORE_SORT_HORIZON_DAYS * 86400) : 0;
+    const referenceTime = yearRange
+      ? yearRange.end
+      : (warpDate
+        ? parseISODateUTC(warpDate, true)
+        : (warpSid !== null
+          ? ((timeIndexBySid.has(warpSid) ? timeShards[timeIndexBySid.get(warpSid)]?.tmax : null) || snapshotRef || manifest.snapshot_time)
+          : (snapshotRef || manifest.snapshot_time)));
+    const cutoff = (!yearRange && referenceTime) ? (referenceTime - SCORE_SORT_HORIZON_DAYS * 86400) : 0;
 
     // If warped to a specific date, scan shards in the time window
     // Otherwise use the shard index with a small radius
     let sids;
-    if (warpDate && referenceTime) {
+    if (yearRange) {
+      const inWindow = timeShards.filter(s => (s.tmax || 0) >= yearRange.start && (s.tmin || 0) <= yearRange.end);
+      sids = inWindow.map(s => s.sid).reverse();
+    } else if (warpDate && referenceTime) {
       const inWindow = timeShards.filter(s => (s.tmax || 0) >= cutoff && (s.tmin || 0) <= referenceTime);
       sids = inWindow.map(s => s.sid).reverse();
     } else if (warpSid !== null) {
@@ -1577,14 +1667,22 @@
     }
 
     clearStatus();
-    setStatus(STATUS_MESSAGES.SCRUB_LOADING);
+    if (yearRange) {
+      setStatus({ text: `Loading 0/${sids.length}...` }, true);
+    } else {
+      setStatus(STATUS_MESSAGES.SCRUB_LOADING);
+    }
 
     let all = [];
-
+    let loadedCount = 0;
     for (const sid of sids) {
       if (token && token !== routeToken) return;
       const db = await loadShardBySid(sid);
       if (!db) continue;
+      loadedCount += 1;
+      if (yearRange) {
+        setStatus({ text: `Loading ${loadedCount}/${sids.length}...` }, true);
+      }
 
       let where = `type='story'`;
       let order = `ORDER BY time DESC`;
@@ -1594,8 +1692,12 @@
       if (view === 'ask') where += ` AND (title LIKE 'Ask HN:%' OR title LIKE 'Ask HN %')`;
       if (view === 'show') where += ` AND (title LIKE 'Show HN:%' OR title LIKE 'Show HN %')`;
       if (view === 'jobs') where = `type='job'`;
-      if (isScoreSorted && cutoff) where += ` AND time >= ${cutoff}`;
-      if (warpDate && referenceTime) where += ` AND time <= ${referenceTime}`;
+      if (yearRange) {
+        where += ` AND time >= ${yearRange.start} AND time <= ${yearRange.end}`;
+      } else {
+        if (isScoreSorted && cutoff) where += ` AND time >= ${cutoff}`;
+        if (warpDate && referenceTime) where += ` AND time <= ${referenceTime}`;
+      }
       if (isScoreSorted && view !== 'news') order = `ORDER BY score DESC, time DESC`;
 
       const rows = sqlAll(db, `
@@ -1608,7 +1710,7 @@
 
       all.push(...rows);
 
-      if (all.length > offset + ITEMS_PER_PAGE + 300) break;
+      if (!yearRange && all.length > offset + ITEMS_PER_PAGE + 300) break;
     }
 
     if (isScoreSorted) all.sort((a,b) => (b.score||0)-(a.score||0) || (b.time||0)-(a.time||0));
@@ -1637,12 +1739,14 @@
     }
 
     if (token && token !== routeToken) return;
-    const retryKey = `${view}|${page}|${warpSid ?? ''}|${warpDate ?? ''}`;
+    const retryKey = `${view}|${page}|${warpSid ?? ''}|${warpDate ?? ''}|${yearRange ? yearRange.year : ''}`;
     if (!pageRows.length) {
       const labelMap = { news: 'front', newest: 'new', ask: 'ask', show: 'show', jobs: 'jobs' };
       const label = labelMap[view] || view;
       const titled = capitalizeFirst(label);
-      const noItemsMsg = STATUS_MESSAGES.NO_ITEMS(titled, view === 'news');
+      const noItemsMsg = yearRange
+        ? { text: `No ${titled} for ${yearRange.year}.`, holdMs: STATUS_TIMING.HOLD_NO_ITEMS_MS }
+        : STATUS_MESSAGES.NO_ITEMS(titled, view === 'news');
 
       // Avoid wiping the current view if a warp is still resolving or aborted.
       if (warpAbort && warpAbort.signal && warpAbort.signal.aborted) {
@@ -1651,7 +1755,7 @@
       }
       let shouldHoldNoItems = false;
 
-      if (initialRoute && (view !== 'news' || page > 1)) {
+      if (!yearRange && initialRoute && (view !== 'news' || page > 1)) {
         nav({ view: 'news', p: 1, warp: warpSid, warp_date: warpDate, id: null });
         return;
       }
@@ -1671,13 +1775,14 @@
           const curPage = Math.max(1, parseInt(p.get('p') || '1', 10));
           const curWarp = p.get('warp') ? parseInt(p.get('warp'), 10) : null;
           const curWarpDate = p.get('warp_date');
-          if (`${curView}|${curPage}|${curWarp ?? ''}|${curWarpDate ?? ''}` === retryKey) {
-            listView(curView, curPage, curWarp, curWarpDate, token);
+          const curYear = parseYearParam(p.get('year'));
+          if (`${curView}|${curPage}|${curWarp ?? ''}|${curWarpDate ?? ''}|${curYear ?? ''}` === retryKey) {
+            listView(curView, curPage, curWarp, curWarpDate, curYear, token);
           }
         }, 250);
         return;
       }
-      if (warpDate || warpSid !== null) {
+      if (!yearRange && (warpDate || warpSid !== null)) {
         const refSid = warpSid ?? findShardForTs(referenceTime)?.sid;
         if (refSid != null) {
           const fallback = findNextShardWithPosts(refSid);
@@ -1708,7 +1813,7 @@
     }
     if (referenceTime) setReferenceTime(referenceTime, true);
     clearStatus();
-    renderList(pageRows, view, page, offset, commentCounts);
+    renderList(pageRows, view, page, offset, commentCounts, yearRange ? yearRange.year : null);
 
     if (lastWarpSid != null && lastWarpDirection !== 0) {
       prefetchAdjacentShard(lastWarpSid, lastWarpDirection);
@@ -1730,7 +1835,7 @@
     loadShardBySid(nextSid).catch(() => {});
   }
 
-  function renderList(items, view, page, offset, commentCounts = new Map()) {
+  function renderList(items, view, page, offset, commentCounts = new Map(), year = null) {
     let html = '';
     items.forEach((it, i) => {
       const rank = offset + i + 1;
@@ -1773,11 +1878,13 @@
     });
 
     const hasMore = items.length === ITEMS_PER_PAGE;
+    const yearParam = year ? `&year=${year}` : '';
+    const yearNav = year ? `,year:${year}` : '';
     if (hasMore) {
       html += `
         <tr class="morespace" style="height:10px"></tr>
         <tr><td colspan="2"></td><td class="title">
-          <a href="?view=${view}&p=${page+1}" class="morelink" onclick="nav({view:'${view}',p:${page+1}});return false;">More</a>
+          <a href="?view=${view}&p=${page+1}${yearParam}" class="morelink" onclick="nav({view:'${view}',p:${page+1}${yearNav}});return false;">More</a>
         </td></tr>
       `;
     }
@@ -3193,6 +3300,7 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
     const id = p.get('id');
     const warp = p.get('warp') ? parseInt(p.get('warp'), 10) : null;
     const warpDate = p.get('warp_date');
+    const year = parseYearParam(p.get('year'));
     if (warpDate && timeRange.min && timeRange.max) {
       let ts = parseISODateUTC(warpDate, false);
       if (ts) {
@@ -3201,7 +3309,7 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
         const iso = formatISODateUTC(ts);
         if (iso !== warpDate) {
           const targetShard = findShardForTs(ts);
-          nav({ view, p: 1, warp: targetShard?.sid ?? null, warp_date: iso, id: null });
+          nav({ view, p: 1, warp: targetShard?.sid ?? null, warp_date: iso, year: null, id: null });
           return;
         }
       }
@@ -3221,6 +3329,7 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
       const snapRef = getSnapshotReferenceTime();
       if (snapRef) setWarpInputs(formatISODateUTC(snapRef));
     }
+    setYearInputValue(year);
 
     if (view === 'item' && id) {
       currentThreadId = Number(id);
@@ -3274,7 +3383,7 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
     if (['news','newest','ask','show','jobs'].includes(view)) {
       currentThreadId = null;
       clearResumeStates();
-      await listView(view, page, warp, warpDate, token);
+      await listView(view, page, warp, warpDate, year, token);
       initialRoute = false;
       return;
     }
@@ -3397,7 +3506,7 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
           if (snapRef) {
             setWarpInputs(formatISODateUTC(snapRef));
           }
-          nav({ view: 'news', p: 1, warp: null, warp_date: null, id: null });
+          nav({ view: 'news', p: 1, warp: null, warp_date: null, year: null, id: null });
         });
       }
 
@@ -3409,7 +3518,29 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
           if (!targetShard) return;
           const iso = formatISODateUTC(targetShard.tmin || targetShard.tmax || timeRange.min);
           setWarpInputs(iso);
-          nav({ view: 'news', p: 1, warp: targetShard.sid, warp_date: iso, id: null });
+          nav({ view: 'news', p: 1, warp: targetShard.sid, warp_date: iso, year: null, id: null });
+        });
+      }
+
+      if (yearLinkEl) {
+        yearLinkEl.addEventListener('click', (e) => {
+          e.preventDefault();
+          const value = yearInputEl && yearInputEl.value ? yearInputEl.value : (qs().get('year') || 'latest');
+          goToYearView(value);
+        });
+      }
+      if (yearInputEl) {
+        buildYearOptions();
+        yearInputEl.addEventListener('change', () => {
+          if (!yearInputEl.value) return;
+          goToYearView(yearInputEl.value);
+        });
+        yearInputEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (!yearInputEl.value) return;
+            goToYearView(yearInputEl.value);
+          }
         });
       }
 
@@ -3421,7 +3552,7 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
           const storedWarpSid = headerDateEl.dataset.warpSid;
           const warp = storedWarpSid ? parseInt(storedWarpSid, 10) : (p.get('warp') ? parseInt(p.get('warp'), 10) : null);
           const warpDate = storedWarpDate || (p.get('warp_date') || null);
-          nav({ view: 'news', p: 1, warp, warp_date: warpDate, id: null });
+          nav({ view: 'news', p: 1, warp, warp_date: warpDate, year: null, id: null });
         });
       }
 

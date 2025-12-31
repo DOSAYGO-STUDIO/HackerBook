@@ -26,8 +26,6 @@ else
 fi
 require_file "docs/archive-index.json.gz"
 require_file "docs/cross-shard-index.bin.gz"
-require_dir "docs/static-shards"
-require_dir "docs/static-user-stats-shards"
 require_dir "docs/assets"
 
 # Ensure screenshots referenced in README exist.
