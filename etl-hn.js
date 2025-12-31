@@ -9,7 +9,7 @@
  *
  * Output:
  *  - ./docs/shards/shard_<sid>.sqlite        (always created during build)
- *  - (post-pass) ./docs/shards/shard_<sid>.sqlite.gz
+ *  - (post-pass) ./docs/shards/shard_<sid>_<hash>.sqlite.gz
  *  - ./docs/manifest.json                   (updated to reference gz files if --gzip)
  *
  * NOTE:
@@ -21,6 +21,7 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const os = require("os");
+const crypto = require("crypto");
 const { pipeline } = require("stream/promises");
 const { execSync } = require("child_process");
 const readline = require("readline");
@@ -163,6 +164,69 @@ async function gzipFile(srcPath, dstPath) {
   return stat.size;
 }
 
+async function gzipFileToTemp(srcPath, tmpPath) {
+  await pipeline(
+    fs.createReadStream(srcPath),
+    zlib.createGzip({ level: 9 }),
+    fs.createWriteStream(tmpPath)
+  );
+  return fs.statSync(tmpPath).size;
+}
+
+async function hashFileHex(filePath, hexLen = 12) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", reject);
+    stream.on("data", chunk => hash.update(chunk));
+    stream.on("end", () => {
+      resolve(hash.digest("hex").slice(0, hexLen));
+    });
+  });
+}
+
+function isHashedShardName(name) {
+  return /^shard_\d+_[0-9a-f]{12}\.sqlite\.gz$/.test(name);
+}
+
+function buildShardGzMap() {
+  const map = new Map();
+  const files = fs.readdirSync(OUT_DIR);
+  for (const file of files) {
+    const match = /^shard_(\d+)(?:_([0-9a-f]{12}))?\.sqlite\.gz$/.exec(file);
+    if (!match) continue;
+    const sid = Number(match[1]);
+    const hasHash = !!match[2];
+    const existing = map.get(sid);
+    if (!existing || hasHash) {
+      map.set(sid, file);
+    }
+  }
+  return map;
+}
+
+function getShardGzInfo(sid, gzMap) {
+  const file = gzMap.get(sid);
+  if (!file) return null;
+  return { file, path: path.join(OUT_DIR, file) };
+}
+
+async function normalizeShardGzName(sid, gzInfo, gzMap) {
+  if (!gzInfo || isHashedShardName(gzInfo.file)) return gzInfo;
+  const hash = await hashFileHex(gzInfo.path, 12);
+  const nextFile = `shard_${sid}_${hash}.sqlite.gz`;
+  const nextPath = path.join(OUT_DIR, nextFile);
+  if (gzInfo.path !== nextPath) {
+    if (fs.existsSync(nextPath)) {
+      fs.unlinkSync(gzInfo.path);
+    } else {
+      fs.renameSync(gzInfo.path, nextPath);
+    }
+  }
+  gzMap.set(sid, nextFile);
+  return { file: nextFile, path: nextPath };
+}
+
 async function runPool(items, limit, worker) {
   const queue = items.slice();
   const workers = Array.from({ length: Math.max(1, limit) }, async () => {
@@ -194,15 +258,16 @@ async function gunzipToTemp(srcPath, tmpRoot) {
 
 async function rebuildManifestFromShards() {
   const files = fs.readdirSync(OUT_DIR);
-  const shardRe = /^shard_(\d+)\.sqlite(\.gz)?$/;
+  const shardRe = /^shard_(\d+)(?:_[0-9a-f]{12})?\.sqlite(\.gz)?$/;
   const shardMap = new Map();
   for (const file of files) {
     const match = shardRe.exec(file);
     if (!match) continue;
     const sid = Number(match[1]);
     const isGz = !!match[2];
+    const isHashed = isHashedShardName(file);
     const existing = shardMap.get(sid);
-    if (!existing || (isGz && !existing.isGz)) {
+    if (!existing || (isGz && !existing.isGz) || (isHashed && existing.isGz && !isHashedShardName(existing.file))) {
       shardMap.set(sid, { sid, file, isGz });
     }
   }
@@ -469,6 +534,7 @@ function computeEffectiveTimeStats(sqlitePath, fallbackMin, fallbackMax) {
 async function vacuumAndGzipAllShards(manifest, opts = {}) {
   const isRestart = !!opts.restart;
   const checkCount = Math.max(1, POST_CONCURRENCY * 2);
+  const gzMap = buildShardGzMap();
 
   console.log(`\n[post] Finalizing shards...`);
   console.log(`[post] vacuum: ${VACUUM_AT_END ? "yes" : "no"} | gzip: ${GZIP_SHARDS ? "yes" : "no"} | keep-sqlite: ${KEEP_SQLITE ? "yes" : "no"} | concurrency: ${POST_CONCURRENCY}`);
@@ -478,12 +544,12 @@ async function vacuumAndGzipAllShards(manifest, opts = {}) {
 
   if (isRestart) {
     const sqliteTodo = updated.shards
-      .filter(s => fs.existsSync(path.join(OUT_DIR, `shard_${s.sid}.sqlite`)) && !fs.existsSync(path.join(OUT_DIR, `shard_${s.sid}.sqlite.gz`)))
+      .filter(s => fs.existsSync(path.join(OUT_DIR, `shard_${s.sid}.sqlite`)) && !getShardGzInfo(s.sid, gzMap))
       .sort((a, b) => a.sid - b.sid)
       .slice(0, checkCount);
 
     const allGz = updated.shards
-      .filter(s => fs.existsSync(path.join(OUT_DIR, `shard_${s.sid}.sqlite.gz`)))
+      .filter(s => getShardGzInfo(s.sid, gzMap))
       .sort((a, b) => a.sid - b.sid);
     const allSqlite = updated.shards
       .filter(s => fs.existsSync(path.join(OUT_DIR, `shard_${s.sid}.sqlite`)))
@@ -505,15 +571,16 @@ async function vacuumAndGzipAllShards(manifest, opts = {}) {
     }
 
     const gzExisting = updated.shards
-      .filter(s => fs.existsSync(path.join(OUT_DIR, `shard_${s.sid}.sqlite.gz`)))
+      .filter(s => getShardGzInfo(s.sid, gzMap))
       .sort((a, b) => a.sid - b.sid);
     const gzTail = gzExisting.slice(Math.max(0, gzExisting.length - checkCount));
     if (gzTail.length) {
       process.stdout.write(`[post] restart: checking ${gzTail.length} gzip shards...`);
       for (const s of gzTail) {
-        const gzPath = path.join(OUT_DIR, `shard_${s.sid}.sqlite.gz`);
+        const gzInfo = getShardGzInfo(s.sid, gzMap);
+        if (!gzInfo) continue;
         try {
-          validateGzipFileSync(gzPath);
+          validateGzipFileSync(gzInfo.path);
         } catch (err) {
           console.error(`\n[post] gzip validation failed for shard ${s.sid}: ${err && err.message ? err.message : err}`);
           process.exit(1);
@@ -527,13 +594,14 @@ async function vacuumAndGzipAllShards(manifest, opts = {}) {
   for (const s of updated.shards) {
     shardIndex += 1;
     const sqlitePath = path.join(OUT_DIR, `shard_${s.sid}.sqlite`);
-    const gzPath = sqlitePath + ".gz";
+    let gzInfo = getShardGzInfo(s.sid, gzMap);
     const hasSqlite = fs.existsSync(sqlitePath);
-    const hasGz = fs.existsSync(gzPath);
+    const hasGz = !!gzInfo;
     if (!hasSqlite) {
       if (hasGz && GZIP_SHARDS) {
-        s.file = path.basename(gzPath);
-        s.bytes = fs.statSync(gzPath).size;
+        gzInfo = await normalizeShardGzName(s.sid, gzInfo, gzMap);
+        s.file = gzInfo.file;
+        s.bytes = fs.statSync(gzInfo.path).size;
       }
       continue;
     }
@@ -554,10 +622,11 @@ async function vacuumAndGzipAllShards(manifest, opts = {}) {
 
     if (GZIP_SHARDS) {
       if (!hasGz) {
-        gzipQueue.push({ s, sqlitePath, gzPath });
+        gzipQueue.push({ s, sqlitePath });
       } else {
-        s.file = path.basename(gzPath);
-        s.bytes = fs.statSync(gzPath).size;
+        gzInfo = await normalizeShardGzName(s.sid, gzInfo, gzMap);
+        s.file = gzInfo.file;
+        s.bytes = fs.statSync(gzInfo.path).size;
         if (!KEEP_SQLITE) fs.unlinkSync(sqlitePath);
       }
     } else {
@@ -571,19 +640,29 @@ async function vacuumAndGzipAllShards(manifest, opts = {}) {
   if (GZIP_SHARDS && gzipQueue.length) {
     let done = 0;
     const total = gzipQueue.length;
-    await runPool(gzipQueue, POST_CONCURRENCY, async ({ s, sqlitePath, gzPath }) => {
-      const gzBytes = await gzipFile(sqlitePath, gzPath);
+    await runPool(gzipQueue, POST_CONCURRENCY, async ({ s, sqlitePath }) => {
+      const tmpPath = `${sqlitePath}.gz.tmp`;
+      await gzipFileToTemp(sqlitePath, tmpPath);
       try {
-        validateGzipFileSync(gzPath);
+        validateGzipFileSync(tmpPath);
       } catch (err) {
         console.error(`\n[post] gzip validation failed for shard ${s.sid}: ${err && err.message ? err.message : err}`);
         process.exit(1);
       }
-      s.file = path.basename(gzPath);
-      s.bytes = gzBytes;
+      const hash = await hashFileHex(tmpPath, 12);
+      const finalName = `shard_${s.sid}_${hash}.sqlite.gz`;
+      const finalPath = path.join(OUT_DIR, finalName);
+      if (fs.existsSync(finalPath)) {
+        fs.unlinkSync(tmpPath);
+      } else {
+        fs.renameSync(tmpPath, finalPath);
+      }
+      gzMap.set(s.sid, finalName);
+      s.file = finalName;
+      s.bytes = fs.statSync(finalPath).size;
       if (!KEEP_SQLITE) fs.unlinkSync(sqlitePath);
       done += 1;
-      process.stdout.write(`\r[post] gzip ${done}/${total} | last sid ${s.sid} | ${mb(gzBytes)}MB`);
+      process.stdout.write(`\r[post] gzip ${done}/${total} | last sid ${s.sid} | ${mb(s.bytes)}MB`);
     });
     process.stdout.write("\n");
   }

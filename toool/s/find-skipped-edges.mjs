@@ -152,7 +152,12 @@ async function main() {
       shardRec = shards.find(s => s.sid === Number(args.shard));
     } else {
       const base = path.basename(String(args.shard));
-      shardRec = shards.find(s => s.file === base || `shard_${s.sid}.sqlite.gz` === base || `shard_${s.sid}.sqlite` === base);
+      const match = /^shard_(\d+)(?:_[0-9a-f]{12})?\.sqlite(\.gz)?$/.exec(base);
+      if (match) {
+        shardRec = shards.find(s => s.sid === Number(match[1]));
+      } else {
+        shardRec = shards.find(s => s.file === base || `shard_${s.sid}.sqlite.gz` === base || `shard_${s.sid}.sqlite` === base);
+      }
     }
     if (!shardRec) {
       console.error(`Shard not found for: ${args.shard}`);
