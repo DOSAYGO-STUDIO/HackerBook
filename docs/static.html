@@ -136,10 +136,8 @@
 }
     .header-date:visited { color: #f6f6ef !important; text-decoration: none; }
     .header-date:hover { text-decoration: none; }
-    .me-title:visited { color: #0000cc; }
     .me-title.me-story { font-weight: 600; }
     .me-title.me-comment { font-style: normal; font-weight: 400; color: #444; }
-    .me-title.me-comment:visited { color: #444; }
     .thread-hidden { display: none; }
     .togg {
       color: #828282;
@@ -186,6 +184,20 @@
       padding: 6px 8px;
       text-align: left;
       font-size: 8pt;
+    }
+    .archive-shard-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+    }
+    .archive-shard-cell .db-icon {
+      margin-right: 0;
+    }
+    .archive-shard-cell a {
+      min-width: 0;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .archive-table th {
       background: #efefe3;
@@ -402,6 +414,47 @@
       .archive-badge { grid-row: 3; grid-column: 2; font-size: 8pt; }
       .warp-input, .time-step { font-size: 16px; }
       .warp-input.top { width: 140px; }
+      body[data-view="archive"] #content-table > tbody > tr > td {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+      }
+      body[data-view="archive"] { overflow-x: hidden; }
+      body[data-view="archive"] #hnmain { overflow-x: hidden; }
+      body[data-view="archive"] .record-label { width: 110px; }
+      body[data-view="archive"] .record-table td {
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      body[data-view="archive"] .archive-table-wrap {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: hidden;
+      }
+      body[data-view="archive"] .archive-table-wrap.shard-index {
+        overflow-x: hidden;
+      }
+      body[data-view="archive"] .archive-table.shard-index {
+        width: 100%;
+        table-layout: fixed;
+      }
+      body[data-view="archive"] .archive-table th,
+      body[data-view="archive"] .archive-table td {
+        padding: 4px 6px;
+        font-size: 7pt;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      body[data-view="archive"] .archive-table.shard-index th,
+      body[data-view="archive"] .archive-table.shard-index td {
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      body[data-view="archive"] .archive-table td a {
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
       .warp-input.top.warp-date { width: 104px; max-width: 104px; }
       .footer-info { text-align: center; font-size: 10px; }
       .yclinks { font-size: 10px; padding-bottom: 12px; }
@@ -2156,18 +2209,22 @@
     }
 
     const data = [xs, ysFiltered];
+    const targetWidth = target.clientWidth || 640;
+    const axisScale = targetWidth < 600 ? 0.65 : 1;
+    const axisLeft = Math.round(54 * axisScale);
+    const axisBottom = Math.round(28 * axisScale);
     const opts = {
-      width: target.clientWidth || 640,
+      width: targetWidth,
       height: 220,
-      padding: [8, 16, 28, 54],
+      padding: [8, 16, axisBottom, axisLeft],
       scales: { x: { time: true } },
       series: [
         {},
         { label: 'Items', stroke: '#0000cc', width: 1 }
       ],
       axes: [
-        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: 28 },
-        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: 54, label: 'Items/day' }
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: axisBottom },
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: axisLeft, label: 'Items/day', labelGap: 40 }
       ],
       plugins: [wheelZoomPlugin(), dragPanPlugin()]
     };
@@ -2217,18 +2274,22 @@
     if (!xs.length) return;
 
     const data = [xs, ys];
+    const targetWidth = target.clientWidth || 640;
+    const axisScale = targetWidth < 600 ? 0.8 : 1;
+    const axisLeft = Math.round(54 * axisScale);
+    const axisBottom = Math.round(28 * axisScale);
     const opts = {
-      width: target.clientWidth || 640,
+      width: targetWidth,
       height: 210,
-      padding: [8, 16, 28, 54],
+      padding: [8, 16, axisBottom, axisLeft],
       scales: { x: { time: true } },
       series: [
         {},
         { label: 'Active users (posted)', stroke: '#0000cc', width: 1 }
       ],
       axes: [
-        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: 28 },
-        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: 54 }
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: axisBottom },
+        { stroke: '#828282', grid: { stroke: '#e0e0d6' }, size: axisLeft }
       ]
     };
 
@@ -2287,17 +2348,21 @@
       </td></tr>
       <tr><td style="padding:0 10px 12px 10px">
         <div class="subtext" style="margin-bottom:6px">Manifest files</div>
-        <table class="archive-table">
-          <tr><th>File</th><th>Size</th><th>Notes</th></tr>
-          ${manifestRows || ''}
-        </table>
+        <div class="archive-table-wrap">
+          <table class="archive-table">
+            <tr><th>File</th><th>Size</th><th>Notes</th></tr>
+            ${manifestRows || ''}
+          </table>
+        </div>
       </td></tr>
       <tr><td style="padding:0 10px 12px 10px">
         <div class="subtext" style="margin-bottom:6px">Shard index</div>
-        <table class="archive-table">
-          <tr><th>Shard</th><th>Start</th><th>End</th><th>Days</th><th>Posts</th><th>Comments</th><th>Items</th><th>Size</th></tr>
-          <tbody id="archive-shard-body"></tbody>
-        </table>
+        <div class="archive-table-wrap shard-index">
+          <table class="archive-table shard-index">
+            <tr><th>Shard</th><th>Start</th><th>End</th><th>Days</th><th>Posts</th><th>Comments</th><th>Items</th><th>Size</th></tr>
+            <tbody id="archive-shard-body"></tbody>
+          </table>
+        </div>
       </td></tr>
     `;
 
@@ -2312,10 +2377,10 @@
           const tmax = s.tmax_eff || s.tmax;
           const start = formatDateShort(tmin);
           const end = formatDateShort(tmax);
-          const spanDays = (tmin && tmax) ? Math.max(1, Math.round((tmax - tmin) / 86400)) : '';
-          return `
+            const spanDays = (tmin && tmax) ? Math.max(1, Math.round((tmax - tmin) / 86400)) : '';
+            return `
             <tr>
-              <td><span class="db-icon"></span><a href="static-shards/${s.file}">${s.file}</a></td>
+              <td><span class="archive-shard-cell"><span class="db-icon"></span><a href="static-shards/${s.file}">${s.file}</a></span></td>
               <td>${start}</td>
               <td>${end}</td>
               <td>${spanDays}</td>
@@ -2955,6 +3020,8 @@ function previewTitle(title = '', text = '', type = '', maxLen = 80) {
 
     const p = qs();
     const view = p.get('view') || 'news';
+    document.body.setAttribute('data-view', view);
+    document.documentElement.setAttribute('data-view', view);
     const page = Math.max(1, parseInt(p.get('p') || '1', 10));
     const id = p.get('id');
     const warp = p.get('warp') ? parseInt(p.get('warp'), 10) : null;
