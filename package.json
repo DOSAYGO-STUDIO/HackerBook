@@ -2,7 +2,7 @@
   "name": "static-news",
   "version": "1.0.0",
   "scripts": {
-    "etl": "node etl.js --gzip",
+    "etl": "node etl-hn.js --gzip",
     "sync-docs": "cp docs/static.html docs/index.html"
   },
   "dependencies": {
