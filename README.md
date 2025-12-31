@@ -5,7 +5,6 @@
 Community, all the HN belong to you. This repo packages 20 years of Hacker News into a **static** archive you can run entirely in your browser. The site is just files: HTML, JSON, and gzipped SQLite shards. No server app required.
 
 - Demo: https://hackerbook.dosaygo.com
-- Landing / download: https://dosaygo-studio.github.io/HackerBook/
 - Code: https://github.com/DOSAYGO-STUDIO/HackerBook
 
 ![Hacker Book front page](docs/assets/hn-home.png)
