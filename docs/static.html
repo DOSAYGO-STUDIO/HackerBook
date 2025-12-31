@@ -374,7 +374,15 @@
       body[data-view="item"] #hnmain { overflow-x: hidden; }
       body[data-view="item"] #content-table { width: 100%; table-layout: fixed; }
       tr.comtr > td > table { width: 100%; table-layout: fixed; }
-      tr.comtr .ind { max-width: 80px; overflow: hidden; }
+      tr.comtr .ind { overflow: hidden; }
+      tr.comtr[data-depth="0"] .ind { width: 0 !important; }
+      tr.comtr[data-depth="1"] .ind { width: 30px !important; }
+      tr.comtr[data-depth="2"] .ind { width: 48px !important; }
+      tr.comtr[data-depth="3"] .ind { width: 60px !important; }
+      tr.comtr[data-depth="4"] .ind { width: 67px !important; }
+      tr.comtr[data-depth="5"] .ind { width: 71px !important; }
+      tr.comtr[data-depth="6"] .ind { width: 74px !important; }
+      tr.comtr:not([data-depth="0"]):not([data-depth="1"]):not([data-depth="2"]):not([data-depth="3"]):not([data-depth="4"]):not([data-depth="5"]):not([data-depth="6"]) .ind { width: 76px !important; }
       tr.comtr td.default { overflow: hidden; }
       .commtext { max-width: 100%; margin-right: 0; overflow-wrap: anywhere; word-break: break-word; }
       .commtext pre { max-width: 100%; overflow-x: auto; box-sizing: border-box; }
