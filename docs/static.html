@@ -1608,13 +1608,10 @@
     (archiveIndex?.shards || []).forEach(s => postsBySid.set(s.sid, s.posts || 0));
     timeShards = (manifest?.shards || []).map(s => {
       const eff = effMap.get(s.sid);
-      const tminCandidates = [eff?.tmin_eff, s.tmin_eff, s.tmin].filter(v => Number.isFinite(v) && v > 0);
-      const tmaxCandidates = [eff?.tmax_eff, s.tmax_eff, s.tmax].filter(v => Number.isFinite(v) && v > 0);
-      return {
-        sid: s.sid,
-        tmin: tminCandidates.length ? Math.min(...tminCandidates) : 0,
-        tmax: tmaxCandidates.length ? Math.max(...tmaxCandidates) : 0
-      };
+      // Prefer effective time spans over raw (raw can have outliers/errors)
+      const tmin = eff?.tmin_eff ?? s.tmin_eff ?? s.tmin ?? 0;
+      const tmax = eff?.tmax_eff ?? s.tmax_eff ?? s.tmax ?? 0;
+      return { sid: s.sid, tmin, tmax };
     }).sort((a,b)=> (a.tmax||0) - (b.tmax||0) || (a.tmin||0) - (b.tmin||0));
     latestShardTs = timeShards.length ? (timeShards[timeShards.length - 1].tmax || 0) : null;
     timeIndexBySid.clear();
