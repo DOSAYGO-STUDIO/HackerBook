@@ -432,11 +432,14 @@
         overflow-x: hidden;
       }
       body[data-view="archive"] .archive-table-wrap.shard-index {
-        overflow-x: hidden;
+        display: block;
+        max-width: calc(100vw - 32px);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
       }
       body[data-view="archive"] .archive-table.shard-index {
-        width: 100%;
-        table-layout: fixed;
+        width: max-content;
+        table-layout: auto;
       }
       body[data-view="archive"] .archive-table th,
       body[data-view="archive"] .archive-table td {
@@ -447,9 +450,7 @@
       }
       body[data-view="archive"] .archive-table.shard-index th,
       body[data-view="archive"] .archive-table.shard-index td {
-        white-space: normal;
-        word-break: break-word;
-        overflow-wrap: anywhere;
+        white-space: nowrap;
       }
       body[data-view="archive"] .archive-table td a {
         word-break: break-word;
