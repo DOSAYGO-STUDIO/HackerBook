@@ -19,17 +19,33 @@ Static, offline-friendly Hacker News archive shipped as plain files. Everything 
 - `docs/static-manifest.json.gz`, `docs/archive-index.json.gz`, `docs/cross-shard-index.bin.gz`: indexes the app fetches and gunzips on load.
 - All assets are static; no backend required.
 
-***But you need to re-run the pipeline and generate fresh versions of the manifests above, PLUS all the shards needed to serve stats and content.***
+## Download the hosted site (no ETL required)
+Grab the deployed assets (core + shards) over HTTPS:
 
-## Rebuild the user stats shards (optional)
-If you’re regenerating from the shipped content (or after re-running ETL):
-1) Install deps: `npm install`
-2) Run the deploy:  
-   `./toool/s/redeploy-checks.sh`
-3) Serve `docs/` as above.
+```
+node toool/download-site.mjs            # downloads everything to ./downloaded-site
+SKIP_SHARDS=1 node toool/download-site.mjs  # only core assets/manifests
+```
+
+Options: `--base`, `--out`, `--no-shards` (or `BASE_URL`, `OUT_DIR`, `SKIP_SHARDS=1`).
+
+## Rebuild user stats shards (from existing item shards)
+If you already have `docs/static-shards/` and want fresh user stats:
+1) `npm install`
+2) `node toool/s/build-user-stats.mjs --gzip --target-mb 15`
+3) Serve `docs/`.
+
+## Full pipeline / predeploy checks
+If you’re regenerating everything (ETL + manifests + shards), use the predeploy checklist:
+
+```
+./toool/s/predeploy-checks.sh [--use-staging] [--restart-etl]
+```
+
+This orchestrates ETL, manifest regen, shard validation, and basic sanity checks (requires BigQuery export inputs).
 
 ## Regenerate everything from BigQuery (advanced)
-This repo assumes you already exported the full HN dataset to `docs/static-shards/`. To redo ETL from BigQuery, adapt `etl-hn.js` / `etl-hn.sh` (not documented here) to produce new shards, then run the user stats step above.
+This assumes you already exported the full HN dataset to `docs/static-shards/`. To redo ETL from BigQuery, adapt `etl-hn.js` / `etl-hn.sh` to produce new shards, then run the user stats step above or the predeploy checklist.
 
 ## Notes
 - Works best on modern browsers (Chrome, Firefox, Safari) with `DecompressionStream`; falls back to pako gzip when needed.
