@@ -2,7 +2,6 @@
 *.log
 node_modules/.cache/
 node_modules/
-package-lock.json
 package.json
 data/raw/*.json.gz
 data/raw/*.gstmp
