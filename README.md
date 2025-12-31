@@ -6,7 +6,12 @@ Static, offline-friendly Hacker News archive shipped as plain files. Everything 
 - Landing / download: https://dosaygo-studio.github.io/HackerBook/
 - Code: https://github.com/DOSAYGO-STUDIO/HackerBook
 
-![Hacker Book screenshot](docs/assets/hn-screenshot.png)
+![Hacker Book front page](docs/assets/hn-home.png)
+
+**Screenshots**
+- Front page: `docs/assets/hn-home.png`
+- Query view: `docs/assets/hn-query.png`
+- Me view: `docs/assets/hn-me.png`
 
 > [!NOTE]
 > This is a fully static archive: no server-side app is required. The browser fetches only the shard files it needs.
