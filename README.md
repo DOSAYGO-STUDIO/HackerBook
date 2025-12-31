@@ -197,6 +197,17 @@ The `cross-shard-index.bin` file uses a custom binary format for compactness (CS
 - **Offsets**: Array of `uint32` indices pointing into the Links array (`(parents_count + 1) * 4` bytes).
 - **Links**: Array of `uint16` shard IDs (`links_count * 2` bytes).
 
+### Cross-shard lookup logic
+The index implements a **Compressed Sparse Row (CSR)** pattern using three parallel arrays:
+1.  **Parent IDs**: A sorted list of story IDs that have cross-shard comments.
+2.  **Offsets**: Pointers into the Links array. The shards for `ParentIDs[i]` are found in `Links` from index `Offsets[i]` to `Offsets[i+1]`.
+3.  **Links**: A flat list of Shard IDs.
+
+**To find shards for a given story:**
+1.  Binary search `Parent IDs` to find the index `i` of the story ID.
+2.  Read `start = Offsets[i]` and `end = Offsets[i+1]`.
+3.  The relevant shards are `Links[start...end]`.
+
 ### SQLite schema (items/edges)
 ```
 items(
