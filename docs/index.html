@@ -114,7 +114,7 @@
       width: 100%;
     }
     #status-right, #status-mid {
-      color: #111;
+      color: #555;
       font-size: 8pt;
       display: inline-block;
       width: 180px;
@@ -433,9 +433,10 @@
       }
       body[data-view="archive"] .archive-table-wrap.shard-index {
         display: block;
-        max-width: calc(100vw - 32px);
+        max-width: calc(100vw - 13px);
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        border-right: 1px dashed #ccc;
       }
       body[data-view="archive"] .archive-table.shard-index {
         width: max-content;
