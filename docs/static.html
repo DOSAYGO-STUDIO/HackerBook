@@ -596,11 +596,12 @@
   // -----------------------
   // Config
   // -----------------------
+  const CACHE_BUST = '20251231';
   const PATHS = {
-    manifest: 'static-manifest.json.gz?v=20251231',
-    archiveIndex: 'archive-index.json.gz?v=20251231',
-    crossIndex: 'cross-shard-index.bin.gz?v=20251231',
-    userStatsManifest: 'static-user-stats-manifest.json.gz?v=20251231'
+    manifest: `static-manifest.json.gz?v=${CACHE_BUST}`,
+    archiveIndex: `archive-index.json.gz?v=${CACHE_BUST}`,
+    crossIndex: `cross-shard-index.bin.gz?v=${CACHE_BUST}`,
+    userStatsManifest: `static-user-stats-manifest.json.gz?v=${CACHE_BUST}`
   };
 
   const ITEMS_PER_PAGE = 30;
