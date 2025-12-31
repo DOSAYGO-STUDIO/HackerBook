@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Shell syntax check
+        run: |
+          bash -n download_hn.sh
+          bash -n toool/s/predeploy-checks.sh
+          bash -n toool/s/ci-verify.sh
+
+      - name: Repo sanity checks
+        run: bash toool/s/ci-verify.sh

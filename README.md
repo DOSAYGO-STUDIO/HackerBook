@@ -1,5 +1,7 @@
 # Hacker Book - The unkillable, offline Hacker News archive
 
+![CI](https://github.com/DOSAYGO-STUDIO/HackerBook/actions/workflows/ci.yml/badge.svg) ![License](https://img.shields.io/github/license/DOSAYGO-STUDIO/HackerBook) ![Stars](https://img.shields.io/github/stars/DOSAYGO-STUDIO/HackerBook?style=flat) ![Archive size](https://img.shields.io/badge/archive-~9GB%20gz-blue)
+
 Community, all the HN belong to you. This repo packages 20 years of Hacker News into a **static** archive you can run entirely in your browser. The site is just files: HTML, JSON, and gzipped SQLite shards. No server app required.
 
 - Demo: https://hackerbook.dosaygo.com
@@ -22,6 +24,13 @@ Community, all the HN belong to you. This repo packages 20 years of Hacker News 
 - [Shards and content hashing](#shards-and-content-hashing)
 - [User stats shards](#user-stats-shards)
 - [Index builders](#index-builders)
+- [Tech deep dive](#tech-deep-dive)
+  - [Data flow: BigQuery -> shards](#data-flow-bigquery---shards)
+  - [Shard + index flow](#shard--index-flow)
+  - [SQLite schema (items/edges)](#sqlite-schema-itemsedges)
+  - [User stats schema](#user-stats-schema)
+  - [BigQuery export schema](#bigquery-export-schema)
+  - [Snapshot semantics](#snapshot-semantics)
 - [Deploy checklist](#deploy-checklist)
 - [Contribute analysis](#contribute-analysis)
 - [FAQ](#faq)
@@ -58,7 +67,7 @@ Inspired by HN Made of Primes, this is the "year-end gift" to the community: kee
 ## Quick start
 Always run `npm install` once in the repo root.
 
-**Archivist workflow (the short version)**  
+**Archivist workflow (the short version)**
 BigQuery -> ETL -> `npx serve docs`
 
 **Build + prep everything**
@@ -70,7 +79,7 @@ BigQuery -> ETL -> `npx serve docs`
 2) Serve the downloaded folder.
 
 > [!TIP]
-> Use `AUTO_RUN=1` for unattended pipeline runs.
+> Use `AUTO_RUN=1` for unattended pipeline runs. ✨
 
 ## Repository layout
 - `docs/`: the static site (HTML, JS, CSS, manifests, indexes, shards)
@@ -135,6 +144,95 @@ The app switches to these shards for the `?view=me` view and when you select "Us
 - Cross-shard index: `node ./toool/s/build-cross-shard-index.mjs --binary`
 - User stats: `node ./toool/s/build-user-stats.mjs --gzip --target-mb 15`
 
+## Tech deep dive
+### Data flow: BigQuery -> shards
+```
+BigQuery (public dataset)
+        |
+        v
+download_hn.sh  ->  data/raw/*.json.gz
+        |
+        v
+etl-hn.js (staging optional)
+        |
+        v
+.sqlite shards  ->  VACUUM  ->  gzip  ->  hash rename
+        |
+        v
+static-manifest.json(.gz)
+```
+
+### Shard + index flow
+```
+static-shards/ (items + edges)
+        |
+        +--> build-archive-index.js  ->  archive-index.json(.gz)
+        |
+        +--> build-cross-shard-index.mjs  ->  cross-shard-index.bin(.gz)
+        |
+        +--> build-user-stats.mjs  ->  static-user-stats-shards/ + manifest
+```
+
+### SQLite schema (items/edges)
+```
+items(
+  id INTEGER PRIMARY KEY,
+  type TEXT,
+  time INTEGER,
+  by TEXT,
+  title TEXT,
+  text TEXT,
+  url TEXT,
+  score INTEGER,
+  parent INTEGER
+)
+
+edges(
+  parent_id INTEGER NOT NULL,
+  ord INTEGER NOT NULL,
+  child_id INTEGER NOT NULL,
+  PRIMARY KEY(parent_id, ord)
+)
+```
+
+### User stats schema
+```
+users(
+  username TEXT PRIMARY KEY,
+  first_time INTEGER,
+  last_time INTEGER,
+  items INTEGER,
+  comments INTEGER,
+  stories INTEGER,
+  ask INTEGER,
+  show INTEGER,
+  launch INTEGER,
+  jobs INTEGER,
+  polls INTEGER,
+  avg_score REAL,
+  sum_score INTEGER,
+  max_score INTEGER,
+  min_score INTEGER,
+  max_score_id INTEGER,
+  max_score_title TEXT
+)
+
+user_domains(username TEXT, domain TEXT, count INTEGER)
+user_months(username TEXT, month TEXT, count INTEGER)
+```
+
+### BigQuery export schema
+```
+SELECT id, title, by, score, time, type, text, url, parent
+FROM `bigquery-public-data.hacker_news.full`
+WHERE deleted IS NULL OR deleted = false
+```
+
+### Snapshot semantics
+- The manifest records a **snapshot time** (latest item time in the dump).
+- The UI normalizes to the snapshot **day end** (23:59:59) so the "front page" is always the final day of the dump.
+- Cache-busting is applied to manifests and indexes; shards are immutable by hash.
+
 ## Deploy checklist
 - `static-manifest.json(.gz)` updated and points to hashed shards.
 - `archive-index.json(.gz)` updated.
@@ -147,13 +245,19 @@ Have charts or analyses you want to feature? Email a link and a short caption to
 
 ## FAQ
 **Is this really offline?**
-Yes. Once the shards you need are cached, browsing is offline. You can also download the whole site and run it locally. ✨
+Yes. Once the shards you need are cached, browsing is offline. You can also download the whole site and run it locally.
+
+**How do I update the archive?**
+Run `download_hn.sh`, then `./toool/s/predeploy-checks.sh` to rebuild shards and indexes.
 
 **Why shards instead of HTTP Range requests?**
 Shards are friendlier to static hosting and cache behavior, and make it easier to reason about data integrity.
 
 **How big is it?**
 The full archive is ~9GB gzipped (~22GB uncompressed), split across ~1.6k shards.
+
+**Can I host this anywhere?**
+Yes. Any static host works (Cloudflare Pages, S3, GitHub Pages, nginx, etc.).
 
 ## Notes
 - Works best on modern browsers (Chrome, Firefox, Safari) with `DecompressionStream`; falls back to pako gzip when needed.
