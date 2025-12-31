@@ -785,9 +785,12 @@
   function renderStatus(force = false) {
     const now = Date.now();
     if (fileLoadCount > 0) {
-      const text = fileLoadTarget > 0
+      const loadingText = fileLoadTarget > 0
         ? `Loading ${fileLoadDone}/${fileLoadTarget}...`
         : (STATUS_MESSAGES.FILE_LOADING.text || 'Loading file…');
+      const text = (manualStatus && fileLoadTarget > 0 && fileLoadDone >= fileLoadTarget)
+        ? manualStatus
+        : loadingText;
       statusRightEl.textContent = text;
       statusMidEl.textContent = text;
       return;
@@ -1412,7 +1415,10 @@
   }
 
   async function loadShardBySid(sid) {
-    if (shardCache.has(sid)) return shardCache.get(sid);
+    if (shardCache.has(sid)) {
+      markFileLoaded(sid);
+      return shardCache.get(sid);
+    }
     if (shardInFlight.has(sid)) return shardInFlight.get(sid);
 
     const rec = (manifest.shards || []).find(s => s.sid === sid);
