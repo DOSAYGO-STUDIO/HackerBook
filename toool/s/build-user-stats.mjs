@@ -10,16 +10,22 @@ import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import zlib from 'zlib';
+import v8 from 'v8';
+import { spawn } from 'child_process';
 import Database from 'better-sqlite3';
-import { Worker } from 'worker_threads';
+import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const BACKUP_STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 
 // Helper to run single blocking query in a worker
-function runQueryInWorker(dbPath, query, params = []) {
+function runQueryInWorker(dbPath, query, params = [], action = 'query') {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(path.join(path.dirname(process.argv[1]), 'sqlite-worker.js'), {
-      workerData: { action: 'query', dbPath, query, params }
+    const worker = new Worker(path.join(__dirname, 'sqlite-worker.js'), {
+      workerData: { action, dbPath, query, params }
     });
     worker.on('message', (msg) => {
       if (msg.error) reject(new Error(msg.error));
@@ -29,6 +35,257 @@ function runQueryInWorker(dbPath, query, params = []) {
     worker.on('exit', (code) => {
       if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
     });
+  });
+}
+
+// Worker entry point
+if (!isMainThread) {
+  runWorker(workerData).catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+async function runWorker({ workerId, stagingPath, outDir, startUser, endUser, targetBytes, totalEst }) {
+  const stagingDb = new Database(stagingPath, { readonly: true });
+  stagingDb.pragma('cache_size = -200000'); // 200MB cache
+
+  // Build query based on range
+  let querySql = `
+    SELECT id, type, time, by, title, url, score 
+    FROM items_raw 
+    WHERE by IS NOT NULL
+  `;
+  const params = [];
+  
+  if (startUser) {
+    querySql += ` AND by >= ? COLLATE NOCASE`;
+    params.push(startUser);
+  }
+  if (endUser) {
+    querySql += ` AND by < ? COLLATE NOCASE`;
+    params.push(endUser);
+  }
+  
+  querySql += ` ORDER BY by COLLATE NOCASE, time`;
+
+  const iter = stagingDb.prepare(querySql).iterate(...params);
+
+  // Shard state
+  let shardSid = 0;
+  let shardDb = null;
+  let shardPath = null;
+  let shardUsers = 0;
+  let shardUserLo = null;
+  let shardUserHi = null;
+  const shardMeta = [];
+  
+  // Growth/active tracking (local to this worker)
+  const growthCounts = new Map();
+  const activeCounts = new Map();
+
+  function openShard() {
+    const fileName = `part_${workerId}_shard_${shardSid}.sqlite`;
+    shardPath = path.join(outDir, fileName);
+    shardDb = initUserDb(shardPath);
+    shardDb.pragma('cache_size = -50000');
+    shardUsers = 0;
+    shardUserLo = null;
+    shardUserHi = null;
+  }
+
+  function finalizeShard() {
+    if (!shardDb) return;
+    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_users_last_time ON users(last_time)');
+    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_users_items ON users(items)');
+    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_user_domains ON user_domains(username)');
+    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_user_months ON user_months(username)');
+    shardDb.close();
+    
+    const bytes = fs.statSync(shardPath).size;
+    shardMeta.push({
+      tempFile: path.basename(shardPath),
+      user_lo: shardUserLo,
+      user_hi: shardUserHi,
+      users: shardUsers,
+      bytes,
+      sqlitePath: shardPath
+    });
+    
+    shardSid += 1;
+    shardDb = null;
+    shardPath = null;
+  }
+
+  openShard();
+
+  let insertUser = shardDb.prepare(`
+    INSERT INTO users (username, first_time, last_time, items, comments, stories, ask, show, launch, jobs, polls, avg_score, sum_score, max_score, min_score, max_score_id, max_score_title)
+    VALUES (@username, @first_time, @last_time, @items, @comments, @stories, @ask, @show, @launch, @jobs, @polls, @avg_score, @sum_score, @max_score, @min_score, @max_score_id, @max_score_title)
+  `);
+  let insertDomain = shardDb.prepare('INSERT INTO user_domains (username, domain, count) VALUES (?, ?, ?)');
+  let insertMonth = shardDb.prepare('INSERT INTO user_months (username, month, count) VALUES (?, ?, ?)');
+
+  let currentUser = null;
+  let userStats = null;
+  let userDomains = null;
+  let userMonths = null;
+
+  function resetAccumulator(username) {
+    currentUser = username;
+    userStats = {
+      username,
+      first_time: null,
+      last_time: null,
+      items: 0,
+      comments: 0,
+      stories: 0,
+      ask: 0,
+      show: 0,
+      launch: 0,
+      jobs: 0,
+      polls: 0,
+      sum_score: 0,
+      max_score: null,
+      min_score: null,
+      max_score_id: null,
+      max_score_title: null
+    };
+    userDomains = new Map();
+    userMonths = new Map();
+  }
+
+  function flushUser() {
+    if (!currentUser || !userStats) return;
+    
+    userStats.avg_score = userStats.items > 0 ? userStats.sum_score / userStats.items : 0;
+    
+    if (userStats.first_time) {
+      const m = monthKey(userStats.first_time);
+      if (m) growthCounts.set(m, (growthCounts.get(m) || 0) + 1);
+    }
+    
+    for (const [month] of userMonths) {
+      activeCounts.set(month, (activeCounts.get(month) || 0) + 1);
+    }
+    
+    const unameKey = lowerName(currentUser);
+    if (!shardUserLo) shardUserLo = unameKey;
+    shardUserHi = unameKey;
+    
+    insertUser.run(userStats);
+    
+    for (const [domain, count] of userDomains) {
+      insertDomain.run(currentUser, domain, count);
+    }
+    
+    for (const [month, count] of userMonths) {
+      insertMonth.run(currentUser, month, count);
+    }
+    
+    shardUsers += 1;
+    
+    if (shardUsers % 1000 === 0) {
+      const size = fs.statSync(shardPath).size;
+      if (size >= targetBytes) {
+        finalizeShard();
+        openShard();
+        insertUser = shardDb.prepare(`
+          INSERT INTO users (username, first_time, last_time, items, comments, stories, ask, show, launch, jobs, polls, avg_score, sum_score, max_score, min_score, max_score_id, max_score_title)
+          VALUES (@username, @first_time, @last_time, @items, @comments, @stories, @ask, @show, @launch, @jobs, @polls, @avg_score, @sum_score, @max_score, @min_score, @max_score_id, @max_score_title)
+        `);
+        insertDomain = shardDb.prepare('INSERT INTO user_domains (username, domain, count) VALUES (?, ?, ?)');
+        insertMonth = shardDb.prepare('INSERT INTO user_months (username, month, count) VALUES (?, ?, ?)');
+      }
+    }
+  }
+
+  let processed = 0;
+  let lastReport = Date.now();
+
+  for (const row of iter) {
+    const username = String(row.by);
+    const usernameKey = lowerName(username);
+    
+    if (usernameKey !== lowerName(currentUser)) {
+      if (currentUser) flushUser();
+      resetAccumulator(username);
+    }
+    
+    const time = row.time || null;
+    const score = Number.isFinite(row.score) ? row.score : 0;
+    const title = row.title || '';
+    const isComment = row.type === 'comment' ? 1 : 0;
+    const isStory = row.type === 'story' ? 1 : 0;
+    const isJob = row.type === 'job' ? 1 : 0;
+    const isPoll = row.type === 'poll' ? 1 : 0;
+    const isAsk = isStory && /^Ask HN:/i.test(title) ? 1 : 0;
+    const isShow = isStory && /^Show HN:/i.test(title) ? 1 : 0;
+    const isLaunch = isStory && /^Launch HN:/i.test(title) ? 1 : 0;
+    
+    userStats.items += 1;
+    userStats.comments += isComment;
+    userStats.stories += isStory;
+    userStats.ask += isAsk;
+    userStats.show += isShow;
+    userStats.launch += isLaunch;
+    userStats.jobs += isJob;
+    userStats.polls += isPoll;
+    userStats.sum_score += score;
+    
+    if (time !== null) {
+      if (userStats.first_time === null || time < userStats.first_time) {
+        userStats.first_time = time;
+      }
+      if (userStats.last_time === null || time > userStats.last_time) {
+        userStats.last_time = time;
+      }
+    }
+    
+    if (userStats.max_score === null || score > userStats.max_score) {
+      userStats.max_score = score;
+      userStats.max_score_id = row.id;
+      userStats.max_score_title = title || null;
+    }
+    if (userStats.min_score === null || score < userStats.min_score) {
+      userStats.min_score = score;
+    }
+    
+    if (row.url) {
+      const domain = domainFromUrl(row.url);
+      if (domain) {
+        userDomains.set(domain, (userDomains.get(domain) || 0) + 1);
+      }
+    }
+    
+    if (time) {
+      const month = monthKey(time);
+      if (month) {
+        userMonths.set(month, (userMonths.get(month) || 0) + 1);
+      }
+    }
+    
+    processed += 1;
+    if (processed % 5000 === 0) {
+      const now = Date.now();
+      if (now - lastReport > 200) {
+        const pct = totalEst > 0 ? Math.round((processed / totalEst) * 100) : 0;
+        parentPort.postMessage({ type: 'progress', processed, pct });
+        lastReport = now;
+      }
+    }
+  }
+
+  if (currentUser) flushUser();
+  if (shardUsers > 0) finalizeShard();
+  
+  stagingDb.close();
+  
+  parentPort.postMessage({
+    type: 'done',
+    shards: shardMeta,
+    growth: Array.from(growthCounts.entries()),
+    active: Array.from(activeCounts.entries())
   });
 }
 
@@ -305,22 +562,31 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
   
   console.log(`[users] Building from staging DB: ${stagingPath}`);
   
-  // Phase 0: Opening DB
-  progress.force('Phase 0/5: Opening and initializing DB...');
+  // Phase 1: Opening DB
+  progress.force('Phase 1/6: Opening and initializing DB...');
   await tick();
-  const stagingDb = new Database(stagingPath, { readonly: true });
+  const stagingDb = new Database(stagingPath); // Read-write for index creation
   stagingDb.pragma('cache_size = -500000'); // 500MB cache for faster reads
-  progress.done('Phase 0/5: Opened DB');
+  
+  // Get DB stats
+  const dbSize = fs.statSync(stagingPath).size;
+  const dbSizeStr = (dbSize / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  const tables = stagingDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name);
+  const tableStr = `${tables.length} tables (${tables.join(', ')})`;
+  
+  progress.done('Phase 1/6: Opened DB', ` - ${dbSizeStr}, ${tableStr}`);
   
   await fsp.mkdir(outDir, { recursive: true });
   
-  // Phase 1: Count total for progress (async with spinner)
-  progress.force('Phase 1/5: Analyzing ID range (initializing)...');
+  // Phase 2: Analyzing ID range
+  progress.force('Phase 2/6: Analyzing ID range (initializing)...');
   
   // Run blocking range query in worker to keep spinner alive
   const { minId, maxId } = await runQueryInWorker(stagingPath, 'SELECT MIN(id) as minId, MAX(id) as maxId FROM items_raw') || { minId: 0, maxId: 0 };
+  progress.done('Phase 2/6: ID range analyzed');
   
-  progress.force('Phase 1/5: Counting items (chunked)...');
+  // Phase 3: Count total for progress (async with spinner)
+  progress.force('Phase 3/6: Counting items (chunked)...');
   await tick();
   
   let totalItems = 0;
@@ -336,7 +602,7 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
       // Update progress based on ID range traversal (approximate)
       const rangeProcessed = Math.min(next - minId, maxId - minId + 1);
       const rangeTotal = maxId - minId + 1;
-      progress.withTotal('Phase 1/5: Counting items', rangeProcessed, rangeTotal, ` | found ${totalItems.toLocaleString()}`);
+      progress.withTotal('Phase 3/6: Counting items', rangeProcessed, rangeTotal, ` | found ${totalItems.toLocaleString()}`);
       await tick();
     }
   } else {
@@ -345,273 +611,190 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
     totalItems = fallbackStmt.get()?.c || 0;
   }
   
-  progress.done('Phase 1/5: Count complete', ` - ${totalItems.toLocaleString()} items`);
+  progress.done('Phase 3/6: Count complete', ` - ${totalItems.toLocaleString()} items`);
   
-  // Phase 2: Query sorted by username - this enables streaming aggregation
-  progress.force('Phase 2/5: Preparing sorted query (this may block)...');
+  // Phase 4: Create Index & Prepare Partitions
+  progress.force('Phase 4/6: Creating index on "by" (this may take a while)...');
   await tick();
   
-  const stmt = stagingDb.prepare(`
-    SELECT id, type, time, by, title, url, score 
-    FROM items_raw 
-    WHERE by IS NOT NULL 
-    ORDER BY by COLLATE NOCASE, time
-  `);
+  // Create index for efficient sorting/partitioning (in worker to keep UI alive)
+  await runQueryInWorker(stagingPath, 'CREATE INDEX IF NOT EXISTS idx_items_raw_by_nocase_time ON items_raw(by COLLATE NOCASE, time)', [], 'exec');
+  progress.done('Phase 4/6: Index ready');
+
+  // Calculate partitions
+  const WORKER_COUNT = Math.max(1, Math.min(8, os.cpus().length));
+  progress.force(`Phase 4/6: Calculating ${WORKER_COUNT} partitions...`);
   
-  await tick();
+  // We need a read connection for partitioning
+  // const stagingDb = new Database(stagingPath, { readonly: true });
   
-  // Note: The first iteration will block while SQLite performs the sort
-  console.log('       (Note: SQLite is now sorting rows. This step is blocking and may take a while.)');
-  const iter = stmt.iterate();
-  progress.done('Phase 2/5: Query prepared, starting iteration', ` - ${totalItems.toLocaleString()} rows to process`);
-  
-  // Shard management
-  let shardSid = 0;
-  let shardDb = null;
-  let shardPath = null;
-  let shardUsers = 0;
-  let shardUserLo = null;
-  let shardUserHi = null;
-  const shardMeta = [];
-  
-  // Growth/active tracking
-  const growthCounts = new Map();
-  const activeCounts = new Map();
-  
-  function openShard() {
-    shardPath = path.join(outDir, `user_${shardSid}.sqlite`);
-    shardDb = initUserDb(shardPath);
-    shardDb.pragma('cache_size = -50000');
-    shardUsers = 0;
-    shardUserLo = null;
-    shardUserHi = null;
+  const partitions = [];
+  if (WORKER_COUNT > 1 && totalItems > 10000) {
+    for (let i = 1; i < WORKER_COUNT; i++) {
+      const offset = Math.floor((totalItems * i) / WORKER_COUNT);
+      const row = stagingDb.prepare(`
+        SELECT by FROM items_raw 
+        WHERE by IS NOT NULL 
+        ORDER BY by COLLATE NOCASE, time 
+        LIMIT 1 OFFSET ?
+      `).get(offset);
+      if (row && row.by) partitions.push(row.by);
+    }
   }
   
-  function finalizeShard() {
-    if (!shardDb) return;
-    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_users_last_time ON users(last_time)');
-    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_users_items ON users(items)');
-    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_user_domains ON user_domains(username)');
-    shardDb.exec('CREATE INDEX IF NOT EXISTS idx_user_months ON user_months(username)');
-    shardDb.close();
+  stagingDb.close(); // Close main connection before spawning workers
+  
+  // Phase 5: Parallel Processing
+  progress.force(`Phase 5/6: Processing with ${WORKER_COUNT} workers...`);
+  
+  const workers = [];
+  const ranges = [];
+  let startUser = null;
+  
+  for (let i = 0; i < WORKER_COUNT; i++) {
+    const endUser = i < partitions.length ? partitions[i] : null;
+    ranges.push({ startUser, endUser });
+    startUser = endUser;
+  }
+  
+  let totalProcessed = 0;
+  const shardMetaAll = [];
+  const growthCountsAll = new Map();
+  const activeCountsAll = new Map();
+  const workerProgress = new Array(WORKER_COUNT).fill(0);
+  const estPerWorker = Math.ceil(totalItems / WORKER_COUNT);
+  
+  // Progress tracking state
+  const phaseStart = Date.now();
+  let lastRender = 0;
+  
+  // Helper to clear lines and redraw table
+  const redrawTable = () => {
+    const now = Date.now();
+    const elapsed = (now - phaseStart) / 1000;
+    const totalPct = Math.round(workerProgress.reduce((a, b) => a + b, 0) / WORKER_COUNT);
+    const rate = totalPct > 0 ? totalPct / elapsed : 0;
+    const eta = rate > 0 ? Math.round((100 - totalPct) / rate) : 0;
+    const etaStr = eta > 60 ? `${Math.floor(eta/60)}m${eta%60}s` : `${eta}s`;
     
-    const bytes = fs.statSync(shardPath).size;
-    shardMeta.push({
-      sid: shardSid,
-      user_lo: shardUserLo,
-      user_hi: shardUserHi,
-      users: shardUsers,
-      file: path.basename(shardPath),
-      bytes,
-      sqlitePath: shardPath
+    // Move cursor up to overwrite previous table (WORKER_COUNT lines + header)
+    // We only do this if we have rendered at least once
+    if (lastRender > 0) {
+      process.stdout.write(`\x1b[${WORKER_COUNT + 2}A`); // Move up N lines
+    }
+    
+    // Header
+    process.stdout.write(`\rPhase 5/6: Processing with ${WORKER_COUNT} workers | Total: ${totalPct}% | ETA: ${etaStr}\x1b[K\n`);
+    process.stdout.write(`\x1b[K\n`); // Spacer line
+    
+    // Worker rows
+    workerProgress.forEach((pct, i) => {
+      const barWidth = 20;
+      const filled = Math.round((pct / 100) * barWidth);
+      const bar = '█'.repeat(filled) + '░'.repeat(barWidth - filled);
+      process.stdout.write(`  Worker ${i}: [${bar}] ${String(pct).padStart(3)}%\x1b[K\n`);
     });
     
-    shardSid += 1;
-    shardDb = null;
-    shardPath = null;
-  }
+    lastRender = now;
+  };
+
+  // Initial draw
+  redrawTable();
+
+  await new Promise((resolve, reject) => {
+    let completed = 0;
+    
+    ranges.forEach((range, idx) => {
+      const worker = new Worker(__filename, {
+        workerData: {
+          workerId: idx,
+          stagingPath,
+          outDir,
+          startUser: range.startUser,
+          endUser: range.endUser,
+          targetBytes,
+          totalEst: estPerWorker
+        }
+      });
+      
+      worker.on('message', (msg) => {
+        if (msg.type === 'progress') {
+          workerProgress[idx] = msg.pct;
+          if (Date.now() - lastRender > 100) redrawTable();
+        } else if (msg.type === 'done') {
+          shardMetaAll.push(...msg.shards);
+          
+          for (const [k, v] of msg.growth) {
+            growthCountsAll.set(k, (growthCountsAll.get(k) || 0) + v);
+          }
+          for (const [k, v] of msg.active) {
+            activeCountsAll.set(k, (activeCountsAll.get(k) || 0) + v);
+          }
+          
+          completed++;
+          workerProgress[idx] = 100;
+          redrawTable();
+          
+          if (completed === WORKER_COUNT) resolve();
+        } else if (msg.error) {
+          reject(new Error(msg.error));
+        }
+      });
+      
+      worker.on('error', reject);
+      worker.on('exit', (code) => {
+        if (code !== 0) reject(new Error(`Worker ${idx} stopped with exit code ${code}`));
+      });
+      
+      workers.push(worker);
+    });
+  });
   
-  openShard();
+  // Final newline to clear the table area
+  process.stdout.write('\n');
+  progress.done('Phase 5/6: Workers complete');
   
-  // Prepared statements for current shard
-  let insertUser = shardDb.prepare(`
-    INSERT INTO users (username, first_time, last_time, items, comments, stories, ask, show, launch, jobs, polls, avg_score, sum_score, max_score, min_score, max_score_id, max_score_title)
-    VALUES (@username, @first_time, @last_time, @items, @comments, @stories, @ask, @show, @launch, @jobs, @polls, @avg_score, @sum_score, @max_score, @min_score, @max_score_id, @max_score_title)
-  `);
-  let insertDomain = shardDb.prepare('INSERT INTO user_domains (username, domain, count) VALUES (?, ?, ?)');
-  let insertMonth = shardDb.prepare('INSERT INTO user_months (username, month, count) VALUES (?, ?, ?)');
+  progress.done('Phase 5/6: Workers complete');
   
-  // Current user accumulator
-  let currentUser = null;
-  let userStats = null;
-  let userDomains = null;
-  let userMonths = null;
+  // Phase 6: Renumber and Finalize
+  progress.force('Phase 6/6: Finalizing shards...');
   
-  function resetAccumulator(username) {
-    currentUser = username;
-    userStats = {
-      username,
-      first_time: null,
-      last_time: null,
-      items: 0,
-      comments: 0,
-      stories: 0,
-      ask: 0,
-      show: 0,
-      launch: 0,
-      jobs: 0,
-      polls: 0,
-      sum_score: 0,
-      max_score: null,
-      min_score: null,
-      max_score_id: null,
-      max_score_title: null
-    };
-    userDomains = new Map();
-    userMonths = new Map();
-  }
+  // Sort shards by user_lo to ensure correct order
+  shardMetaAll.sort((a, b) => {
+    const uA = a.user_lo || '';
+    const uB = b.user_lo || '';
+    return uA.localeCompare(uB);
+  });
   
-  function flushUser() {
-    if (!currentUser || !userStats) return;
-    
-    // Compute avg_score
-    userStats.avg_score = userStats.items > 0 ? userStats.sum_score / userStats.items : 0;
-    
-    // Track growth (first post month)
-    if (userStats.first_time) {
-      const m = monthKey(userStats.first_time);
-      if (m) growthCounts.set(m, (growthCounts.get(m) || 0) + 1);
-    }
-    
-    // Track active months
-    for (const [month] of userMonths) {
-      activeCounts.set(month, (activeCounts.get(month) || 0) + 1);
-    }
-    
-    // Write user
-    const unameKey = lowerName(currentUser);
-    if (!shardUserLo) shardUserLo = unameKey;
-    shardUserHi = unameKey;
-    
-    insertUser.run(userStats);
-    
-    // Write domains
-    for (const [domain, count] of userDomains) {
-      insertDomain.run(currentUser, domain, count);
-    }
-    
-    // Write months
-    for (const [month, count] of userMonths) {
-      insertMonth.run(currentUser, month, count);
-    }
-    
-    shardUsers += 1;
-    
-    // Check shard size periodically
-    if (shardUsers % 1000 === 0) {
-      const size = fs.statSync(shardPath).size;
-      if (size >= targetBytes) {
-        finalizeShard();
-        openShard();
-        insertUser = shardDb.prepare(`
-          INSERT INTO users (username, first_time, last_time, items, comments, stories, ask, show, launch, jobs, polls, avg_score, sum_score, max_score, min_score, max_score_id, max_score_title)
-          VALUES (@username, @first_time, @last_time, @items, @comments, @stories, @ask, @show, @launch, @jobs, @polls, @avg_score, @sum_score, @max_score, @min_score, @max_score_id, @max_score_title)
-        `);
-        insertDomain = shardDb.prepare('INSERT INTO user_domains (username, domain, count) VALUES (?, ?, ?)');
-        insertMonth = shardDb.prepare('INSERT INTO user_months (username, month, count) VALUES (?, ?, ?)');
-      }
-    }
-  }
-  
-  // Phase 3: Process all items (streaming aggregation)
-  let processed = 0;
+  const finalShards = [];
+  let globalSid = 0;
   let totalUsers = 0;
-  let tickCounter = 0;
-  const TICK_EVERY = 10000; // yield to event loop every N items
   
-  for (const row of iter) {
-    const username = String(row.by);
-    const usernameKey = lowerName(username);
+  for (const meta of shardMetaAll) {
+    const oldPath = path.join(outDir, meta.tempFile);
+    const newName = `user_${globalSid}.sqlite`;
+    const newPath = path.join(outDir, newName);
     
-    // Username changed (case-insensitive) - flush previous user
-    if (usernameKey !== lowerName(currentUser)) {
-      if (currentUser) {
-        flushUser();
-        totalUsers += 1;
-      }
-      resetAccumulator(username);
-    }
+    if (fs.existsSync(newPath)) fs.unlinkSync(newPath);
+    fs.renameSync(oldPath, newPath);
     
-    // Accumulate stats
-    const time = row.time || null;
-    const score = Number.isFinite(row.score) ? row.score : 0;
-    const title = row.title || '';
-    const isComment = row.type === 'comment' ? 1 : 0;
-    const isStory = row.type === 'story' ? 1 : 0;
-    const isJob = row.type === 'job' ? 1 : 0;
-    const isPoll = row.type === 'poll' ? 1 : 0;
-    const isAsk = isStory && /^Ask HN:/i.test(title) ? 1 : 0;
-    const isShow = isStory && /^Show HN:/i.test(title) ? 1 : 0;
-    const isLaunch = isStory && /^Launch HN:/i.test(title) ? 1 : 0;
+    meta.file = newName;
+    meta.sid = globalSid;
+    delete meta.tempFile;
     
-    userStats.items += 1;
-    userStats.comments += isComment;
-    userStats.stories += isStory;
-    userStats.ask += isAsk;
-    userStats.show += isShow;
-    userStats.launch += isLaunch;
-    userStats.jobs += isJob;
-    userStats.polls += isPoll;
-    userStats.sum_score += score;
-    
-    if (time !== null) {
-      if (userStats.first_time === null || time < userStats.first_time) {
-        userStats.first_time = time;
-      }
-      if (userStats.last_time === null || time > userStats.last_time) {
-        userStats.last_time = time;
-      }
-    }
-    
-    if (userStats.max_score === null || score > userStats.max_score) {
-      userStats.max_score = score;
-      userStats.max_score_id = row.id;
-      userStats.max_score_title = title || null;
-    }
-    if (userStats.min_score === null || score < userStats.min_score) {
-      userStats.min_score = score;
-    }
-    
-    // Domain tracking
-    if (row.url) {
-      const domain = domainFromUrl(row.url);
-      if (domain) {
-        userDomains.set(domain, (userDomains.get(domain) || 0) + 1);
-      }
-    }
-    
-    // Month tracking
-    if (time) {
-      const month = monthKey(time);
-      if (month) {
-        userMonths.set(month, (userMonths.get(month) || 0) + 1);
-      }
-    }
-    
-    processed += 1;
-    tickCounter += 1;
-    
-    // Update progress with current/total (respects MIN_UPDATE_INTERVAL_MS)
-    progress.withTotal('Phase 3/5', processed, totalItems, ` | ${totalUsers.toLocaleString()} users | ${shardMeta.length} shards`);
-    
-    // Yield to event loop periodically for spinner updates
-    if (tickCounter >= TICK_EVERY) {
-      tickCounter = 0;
-      progress.force('Phase 3/5', `: ${processed.toLocaleString()}/${totalItems.toLocaleString()} (${((processed/totalItems)*100).toFixed(1)}%) | ${totalUsers.toLocaleString()} users`);
-      await tick();
-    }
+    finalShards.push(meta);
+    totalUsers += meta.users;
+    globalSid++;
   }
   
-  // Flush last user
-  if (currentUser) {
-    flushUser();
-    totalUsers += 1;
-  }
-  
-  // Finalize last shard
-  if (shardUsers > 0) {
-    finalizeShard();
-  }
-  
-  stagingDb.close();
-  progress.done('Phase 3/5: Complete', ` - ${processed.toLocaleString()} items → ${totalUsers.toLocaleString()} users → ${shardMeta.length} shards`);
-  
-  // Phase 4: Parallel gzip
-  if (gzipOut && shardMeta.length) {
+  progress.done('Phase 6/6: Shards renamed', ` - ${finalShards.length} shards`);
+
+  // Phase 4 (Legacy name): Parallel gzip
+  if (gzipOut && finalShards.length) {
     const GZIP_CONCURRENCY = Math.max(1, Math.min(8, os.cpus().length));
     let done = 0;
-    const total = shardMeta.length;
-    progress.force(`Phase 4/5: Gzipping shards`, ` 0/${total} (×${GZIP_CONCURRENCY})`);
+    const total = finalShards.length;
+    progress.force(`Phase 6/6: Gzipping shards`, ` 0/${total} (×${GZIP_CONCURRENCY})`);
     
     async function runPool(items, limit, worker) {
       const queue = items.slice();
@@ -625,11 +808,14 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
       await Promise.all(workers);
     }
     
-    await runPool(shardMeta, GZIP_CONCURRENCY, async (meta) => {
+    await runPool(finalShards, GZIP_CONCURRENCY, async (meta) => {
       const sqlitePath = meta.sqlitePath;
-      const gzPath = `${sqlitePath}.gz`;
+      // Update sqlitePath to new name
+      const currentSqlitePath = path.join(outDir, meta.file);
+      const gzPath = `${currentSqlitePath}.gz`;
+      
       await tick();
-      const gzBytes = gzipFileSync(sqlitePath, gzPath);
+      const gzBytes = gzipFileSync(currentSqlitePath, gzPath);
       try {
         validateGzipFileSync(gzPath);
       } catch (err) {
@@ -639,40 +825,38 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
       meta.bytes = gzBytes;
       meta.file = path.basename(gzPath);
       delete meta.sqlitePath;
-      if (!keepSqlite) fs.unlinkSync(sqlitePath);
+      if (!keepSqlite) fs.unlinkSync(currentSqlitePath);
       done += 1;
-      progress.withTotal('Phase 4/5: Gzipping shards', done, total, ` (×${GZIP_CONCURRENCY})`);
-      progress.force('Phase 4/5: Gzipping shards', `: ${done}/${total} (×${GZIP_CONCURRENCY})`);
+      progress.withTotal('Phase 6/6: Gzipping shards', done, total, ` (×${GZIP_CONCURRENCY})`);
     });
-    progress.done('Phase 4/5: Gzipped', ` ${total} shards`);
+    progress.done('Phase 6/6: Gzipped', ` ${total} shards`);
   } else {
-    progress.done('Phase 4/5: Skipped', ' (no gzip)');
-    for (const meta of shardMeta) {
+    for (const meta of finalShards) {
       delete meta.sqlitePath;
     }
   }
   
-  // Phase 5: Build manifest
-  progress.force('Phase 5/5: Building manifest...');
+  // Phase 5 (Legacy name): Build manifest
+  progress.force('Phase 6/6: Building manifest...');
   await tick();
   
   const out = {
     version: 1,
     created_at: new Date().toISOString(),
     target_mb: Math.round(targetBytes / (1024 * 1024)),
-    shards: shardMeta,
+    shards: finalShards,
     totals: { users: totalUsers },
     collation: 'nocase'
   };
   
-  const growthMonths = Array.from(growthCounts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const growthMonths = Array.from(growthCountsAll.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   let cumulative = 0;
   out.user_growth = growthMonths.map(([month, count]) => {
     cumulative += count;
     return { month, new_users: count, total_users: cumulative };
   });
   
-  const activeMonths = Array.from(activeCounts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const activeMonths = Array.from(activeCountsAll.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   out.user_active = activeMonths.map(([month, active_users]) => ({ month, active_users }));
   
   ensureWritableOrBackup(outManifest);
@@ -684,10 +868,10 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
     validateGzipFileSync(gzPath);
   }
   
-  progress.done('Phase 5/5: Manifest written');
+  progress.done('Phase 6/6: Manifest written');
   
   const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`✅ Done! ${totalUsers.toLocaleString()} users → ${shardMeta.length} shards in ${totalElapsed}s`);
+  console.log(`✅ Done! ${totalUsers.toLocaleString()} users → ${finalShards.length} shards in ${totalElapsed}s`);
   progress.stop();
 }
 
@@ -814,6 +998,29 @@ async function buildManifestFromUserShards({ outDir, outManifest, gzipOut, targe
 }
 
 async function main() {
+  // Check memory limit and respawn if necessary
+  const currentLimit = v8.getHeapStatistics().heap_size_limit;
+  const targetLimit = 7 * 1024 * 1024 * 1024; // ~7GB (check against 7GB to ensure we have enough headroom for 8GB target)
+  
+  if (currentLimit < targetLimit && !process.env.SKIP_MEM_CHECK) {
+    console.log(`[memory] Current heap limit (${(currentLimit / 1024 / 1024).toFixed(0)}MB) is too low.`);
+    console.log(`[memory] Respawning with --max-old-space-size=8192...`);
+    
+    return new Promise((resolve, reject) => {
+      const args = ['--max-old-space-size=8192', ...process.execArgv, process.argv[1], ...process.argv.slice(2)];
+      const child = spawn(process.execPath, args, {
+        stdio: 'inherit',
+        env: { ...process.env, SKIP_MEM_CHECK: '1' }
+      });
+      
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Child process exited with code ${code}`));
+      });
+      child.on('error', reject);
+    });
+  }
+
   const args = parseArgs(process.argv);
   const manifestPath = path.resolve(args.manifest);
   const shardsDir = path.resolve(args.shardsDir);
@@ -833,6 +1040,7 @@ async function main() {
 
   // New optimized path: build from staging DB directly
   if (args.fromStaging) {
+    if (!isMainThread) return; // Should not happen, but safety check
     const stagingPath = path.resolve(args.fromStaging);
     if (!fs.existsSync(stagingPath)) {
       console.error(`Staging DB not found: ${stagingPath}`);
