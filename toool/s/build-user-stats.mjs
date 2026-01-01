@@ -80,6 +80,12 @@ async function runWorker({ workerId, stagingPath, outDir, startUser, endUser, ta
   let shardUserHi = null;
   const shardMeta = [];
   
+  // Prepared statements & transaction
+  let insertUser = null;
+  let insertDomain = null;
+  let insertMonth = null;
+  let flushBatch = null;
+  
   // Growth/active tracking (local to this worker)
   const growthCounts = new Map();
   const activeCounts = new Map();
@@ -92,6 +98,25 @@ async function runWorker({ workerId, stagingPath, outDir, startUser, endUser, ta
     shardUsers = 0;
     shardUserLo = null;
     shardUserHi = null;
+    
+    insertUser = shardDb.prepare(`
+      INSERT INTO users (username, first_time, last_time, items, comments, stories, ask, show, launch, jobs, polls, avg_score, sum_score, max_score, min_score, max_score_id, max_score_title)
+      VALUES (@username, @first_time, @last_time, @items, @comments, @stories, @ask, @show, @launch, @jobs, @polls, @avg_score, @sum_score, @max_score, @min_score, @max_score_id, @max_score_title)
+    `);
+    insertDomain = shardDb.prepare('INSERT INTO user_domains (username, domain, count) VALUES (?, ?, ?)');
+    insertMonth = shardDb.prepare('INSERT INTO user_months (username, month, count) VALUES (?, ?, ?)');
+    
+    flushBatch = shardDb.transaction((batch) => {
+      for (const item of batch) {
+        insertUser.run(item.userStats);
+        for (const [domain, count] of item.userDomains) {
+          insertDomain.run(item.currentUser, domain, count);
+        }
+        for (const [month, count] of item.userMonths) {
+          insertMonth.run(item.currentUser, month, count);
+        }
+      }
+    });
   }
 
   function finalizeShard() {
@@ -119,28 +144,9 @@ async function runWorker({ workerId, stagingPath, outDir, startUser, endUser, ta
 
   openShard();
 
-  let insertUser = shardDb.prepare(`
-    INSERT INTO users (username, first_time, last_time, items, comments, stories, ask, show, launch, jobs, polls, avg_score, sum_score, max_score, min_score, max_score_id, max_score_title)
-    VALUES (@username, @first_time, @last_time, @items, @comments, @stories, @ask, @show, @launch, @jobs, @polls, @avg_score, @sum_score, @max_score, @min_score, @max_score_id, @max_score_title)
-  `);
-  let insertDomain = shardDb.prepare('INSERT INTO user_domains (username, domain, count) VALUES (?, ?, ?)');
-  let insertMonth = shardDb.prepare('INSERT INTO user_months (username, month, count) VALUES (?, ?, ?)');
-
   // Batch transaction for speed
   let writeBatch = [];
   const BATCH_SIZE = 5000;
-  
-  const flushBatch = shardDb.transaction((batch) => {
-    for (const item of batch) {
-      insertUser.run(item.userStats);
-      for (const [domain, count] of item.userDomains) {
-        insertDomain.run(item.currentUser, domain, count);
-      }
-      for (const [month, count] of item.userMonths) {
-        insertMonth.run(item.currentUser, month, count);
-      }
-    }
-  });
 
   let currentUser = null;
   let userStats = null;
@@ -212,12 +218,6 @@ async function runWorker({ workerId, stagingPath, outDir, startUser, endUser, ta
       if (size >= targetBytes) {
         finalizeShard();
         openShard();
-        insertUser = shardDb.prepare(`
-          INSERT INTO users (username, first_time, last_time, items, comments, stories, ask, show, launch, jobs, polls, avg_score, sum_score, max_score, min_score, max_score_id, max_score_title)
-          VALUES (@username, @first_time, @last_time, @items, @comments, @stories, @ask, @show, @launch, @jobs, @polls, @avg_score, @sum_score, @max_score, @min_score, @max_score_id, @max_score_title)
-        `);
-        insertDomain = shardDb.prepare('INSERT INTO user_domains (username, domain, count) VALUES (?, ?, ?)');
-        insertMonth = shardDb.prepare('INSERT INTO user_months (username, month, count) VALUES (?, ?, ?)');
       }
     }
   }

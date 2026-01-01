@@ -155,6 +155,8 @@ User stats are separate shards optimized for usernames and monthly activity.
 - Tables: `users`, `user_domains`, `user_months`
 - Built by: `node ./toool/s/build-user-stats.mjs --gzip --target-mb 15`
 
+The build pipeline uses parallel workers to stream data from the staging DB, aggregating stats in-memory and flushing to size-capped SQLite shards.
+
 The app switches to these shards for the `?view=me` view and when you select "User stats shards" in query mode.
 
 ## Index builders
@@ -183,6 +185,20 @@ graph TD
   Cross --> CrossIdx[cross-shard-index.bin]
   UserStats --> UserIdx[static-user-stats-shards/]
 ```
+
+### User stats pipeline
+The user stats generation (`toool/s/build-user-stats.mjs`) is a high-performance pipeline designed to process 40M+ items efficiently:
+
+1.  **Staging DB Source**: Reads directly from the `items_raw` staging table (indexed by `by, time`) instead of parsing raw JSON, significantly reducing I/O overhead.
+2.  **Parallel Partitioning**: The user space is partitioned into equal chunks (by count) and processed by multiple worker threads in parallel.
+3.  **Streaming Aggregation**:
+    *   Workers stream items ordered by user.
+    *   Stats (counts, scores, domains) are aggregated in-memory for the current user.
+    *   Completed user records are flushed to the current SQLite shard.
+4.  **Dynamic Sharding**: Shards are rotated automatically when they reach the target size (default 15MB), ensuring optimal download sizes.
+5.  **Robustness**:
+    *   **Memory Safety**: Automatically detects low heap limits and respawns with increased memory (8GB).
+    *   **Transaction Safety**: Uses batched transactions for high-throughput writes.
 
 ### Manifests and Indexes Details
 - **`static-manifest.json`**: The core routing map. It maps ranges of Item IDs (`id_lo` to `id_hi`) to specific shard files. The client uses this to perform binary searches when looking up a specific ID (e.g., `?id=123`). It is generated during the initial ETL sharding process.
