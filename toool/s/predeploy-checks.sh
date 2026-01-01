@@ -490,17 +490,26 @@ user_stats_manifest_json="${DOCS_DIR}/static-user-stats-manifest.json"
 user_stats_manifest_gz="${DOCS_DIR}/static-user-stats-manifest.json.gz"
 user_stats_sqlite_count="$(count_glob "${DOCS_DIR}/static-user-stats-shards/*.sqlite")"
 user_stats_gz_count="$(count_glob "${DOCS_DIR}/static-user-stats-shards/*.gz")"
+
+# Construct build command (prefer staging DB if available)
+BUILD_USER_STATS_CMD="node ./toool/s/build-user-stats.mjs --gzip --target-mb 15"
+if [[ -f "${REPO_DIR}/data/static-staging-hn.sqlite" ]]; then
+  BUILD_USER_STATS_CMD="${BUILD_USER_STATS_CMD} --from-staging data/static-staging-hn.sqlite"
+fi
+
+# Auto-resume logic for user stats
 if [[ "${user_stats_sqlite_count}" -gt 0 || "${user_stats_gz_count}" -gt 0 ]]; then
   if [[ ! -f "${user_stats_manifest_json}" && ! -f "${user_stats_manifest_gz}" ]]; then
+    pass "Auto-resume: detected user stats shards without manifest"
     rm -f "${user_stats_manifest_gz}.tmp" || true
-    confirm_step "Rebuild user stats manifest from shards now? (build-user-stats.mjs --manifest-only --gzip --target-mb 15)" in_repo node ./toool/s/build-user-stats.mjs --manifest-only --gzip --target-mb 15
+    confirm_step "Resume user stats build (manifest only)? (build-user-stats.mjs --manifest-only)" in_repo node ./toool/s/build-user-stats.mjs --manifest-only --gzip --target-mb 15
   elif [[ ! -f "${user_stats_manifest_json}" && -f "${user_stats_manifest_gz}" ]]; then
     pass "User stats manifest gz present; skipping rebuild"
   else
-    confirm_step "Rebuild user stats now? (build-user-stats.mjs --gzip --target-mb 15)" in_repo node ./toool/s/build-user-stats.mjs --gzip --target-mb 15
+    confirm_step "Rebuild user stats now? (${BUILD_USER_STATS_CMD})" in_repo ${BUILD_USER_STATS_CMD}
   fi
 else
-  confirm_step "Rebuild user stats now? (build-user-stats.mjs --gzip --target-mb 15)" in_repo node ./toool/s/build-user-stats.mjs --gzip --target-mb 15
+  confirm_step "Rebuild user stats now? (${BUILD_USER_STATS_CMD})" in_repo ${BUILD_USER_STATS_CMD}
 fi
 if [[ -f "${user_stats_manifest_json}" ]]; then
   rm -f "${user_stats_manifest_gz}.tmp" || true

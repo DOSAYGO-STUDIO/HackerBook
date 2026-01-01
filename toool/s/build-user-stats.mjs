@@ -360,10 +360,18 @@ function createProgress(startTime) {
     withTotal(phase, current, total, extra = '') {
       currentPhase = phase;
       const pct = total > 0 ? ((current / total) * 100).toFixed(1) : '0.0';
-      const rate = current > 0 ? Math.round(current / ((Date.now() - startTime) / 1000)) : 0;
-      const eta = rate > 0 ? Math.round((total - current) / rate) : 0;
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      const rateVal = current > 0 && elapsedSec > 0 ? current / elapsedSec : 0;
+      
+      let rateStr;
+      if (rateVal === 0) rateStr = '0';
+      else if (rateVal < 1) rateStr = rateVal.toFixed(2);
+      else if (rateVal < 10) rateStr = rateVal.toFixed(1);
+      else rateStr = Math.round(rateVal).toLocaleString();
+
+      const eta = rateVal > 0 ? Math.round((total - current) / rateVal) : 0;
       const etaStr = eta > 60 ? `${Math.floor(eta/60)}m${eta%60}s` : `${eta}s`;
-      currentExtra = `: ${current.toLocaleString()}/${total.toLocaleString()} (${pct}%) ${rate.toLocaleString()}/s ETA ${etaStr}${extra}`;
+      currentExtra = `: ${current.toLocaleString()}/${total.toLocaleString()} (${pct}%) ${rateStr}/s ETA ${etaStr}${extra}`;
       
       const now = Date.now();
       if (now - lastUpdate >= MIN_UPDATE_INTERVAL_MS) {
@@ -1064,6 +1072,18 @@ async function main() {
     return;
   }
 
+  // Auto-resume check: if we have shards but no manifest, assume we crashed in final pass
+  if (!args.manifestOnly && !args.fromStaging) {
+    const hasShards = fs.existsSync(outDir) && fs.readdirSync(outDir).some(f => f.startsWith('user_') && (f.endsWith('.sqlite') || f.endsWith('.gz')));
+    const hasManifest = fs.existsSync(outManifest) || fs.existsSync(`${outManifest}.gz`);
+    
+    if (hasShards && !hasManifest) {
+      console.log('[users] Detected existing shards without manifest. Resuming from final pass...');
+      await buildManifestFromUserShards({ outDir, outManifest, gzipOut, targetMb: Number(args.targetMb || DEFAULT_TARGET_MB) });
+      return;
+    }
+  }
+
   // New optimized path: build from staging DB directly
   if (args.fromStaging) {
     if (!isMainThread) return; // Should not happen, but safety check
@@ -1076,6 +1096,9 @@ async function main() {
     return;
   }
 
+  // If we are here, we are running the legacy path (building from item shards)
+  // This should only happen if --from-staging is NOT provided.
+  
   // Original path: build from gzipped shards (slower)
   const startTime = Date.now();
   const progress = createProgress(startTime);
@@ -1218,7 +1241,7 @@ async function main() {
         // Yield to event loop periodically
         if (tickCounter >= TICK_EVERY) {
           tickCounter = 0;
-          progress.withTotal('Reading shards', shardIndex, shards.length, ` | ${totalItems.toLocaleString()} items`);
+          progress.force('Reading shards', `: ${shardIndex}/${shards.length} | ${totalItems.toLocaleString()} items`);
           await tick();
         }
       }
