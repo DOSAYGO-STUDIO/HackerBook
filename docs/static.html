@@ -238,6 +238,11 @@
     .archive-chart.pad-bottom {
       padding-bottom: 10px;
     }
+    #year-input {
+      max-height: 16px;
+      box-sizing: border-box;
+      transform: translateY(-1px);
+    }
     .warp-input {
       font-family: ui-monospace, Menlo, Consolas, monospace;
       font-size: 10pt;
@@ -384,6 +389,7 @@
     /* Mobile: smaller indents */
     @media (max-width: 600px) {
       body { font-size: 12px; }
+      #year-input { transform: none; }
       .topbar .pagetop { margin-left: 1px; }
       .pagetop, .title { font-size: 12px; line-height: 1.4; }
       .subtext, .comhead { font-size: 10px; line-height: 1.3; }
@@ -531,7 +537,7 @@
                   <a href="?view=ask" data-spa>ask</a> |
                   <a href="?view=show" data-spa>show</a> |
                   <a href="?view=jobs" data-spa>jobs</a> |
-                  <select id="year-input" class="warp-input top" title="Year view" style="width:58px; margin:0 6px 0 4px; transform: translateY(-1px); background-color:silver;"></select>
+                  <select id="year-input" class="warp-input top" title="Year view" style="width:58px; background-color:silver; border-radius: 0; padding: 0 2px 0 0;"></select>
                   |
                   <a href="?view=query" data-spa>query</a> |
                   <a href="?view=me" data-spa id="me-link">me</a>
@@ -618,7 +624,7 @@
 
   const ITEMS_PER_PAGE = 30;
   const LIST_SHARDS_TO_SCAN = 1;        // soft-launch behavior until you add real frontpage snapshots
-  const SHARD_CACHE_LIMIT = 10;
+  const SHARD_CACHE_LIMIT = 20;
   const SCORE_SORT_HORIZON_DAYS = 1;
   const COLLAPSE_STORE_KEY = 'staticNewsCollapsedV1';
   const THREAD_CACHE_LIMIT = 1;
@@ -1741,15 +1747,19 @@
         if (token && token !== routeToken) return;
         for (const [sid, ids] of idsBySid.entries()) {
           const db = shardDbs.get(sid);
-          if (!db) continue;
-          const placeholders = ids.map(() => '?').join(',');
-          const counts = sqlAll(db, `
-            SELECT parent_id, COUNT(*) as cnt FROM edges
-            WHERE parent_id IN (${placeholders})
-            GROUP BY parent_id
-          `, ids);
-          for (const c of counts) {
-            commentCounts.set(c.parent_id, (commentCounts.get(c.parent_id) || 0) + c.cnt);
+          if (!db || !db.isOpen()) continue;
+          try {
+            const placeholders = ids.map(() => '?').join(',');
+            const counts = sqlAll(db, `
+              SELECT parent_id, COUNT(*) as cnt FROM edges
+              WHERE parent_id IN (${placeholders})
+              GROUP BY parent_id
+            `, ids);
+            for (const c of counts) {
+              commentCounts.set(c.parent_id, (commentCounts.get(c.parent_id) || 0) + c.cnt);
+            }
+          } catch (err) {
+            console.warn(`Comment count query failed for shard ${sid}:`, err);
           }
         }
 
@@ -1795,21 +1805,44 @@
     // For year view, load shards concurrently for better performance
     if (yearRange) {
       const signal = warpAbort ? warpAbort.signal : null;
-      const shardDbs = await loadShardsBatch(sids, signal);
-      if (token && token !== routeToken) return;
-
       const where = `(type='story' OR type='job') AND time >= ${yearRange.start} AND time <= ${yearRange.end}`;
-      for (const sid of sids) {
-        const db = shardDbs.get(sid);
-        if (!db) continue;
-        const rows = sqlAll(db, `
-          SELECT id,type,by,time,title,url,score
-          FROM items
-          WHERE ${where}
-          ORDER BY time DESC
-          LIMIT 5000
-        `);
-        all.push(...rows);
+      
+      // Process in batches to avoid OOM and keep cache size low
+      const BATCH_SIZE = 8;
+      let scanned = 0;
+      
+      for (let i = 0; i < sids.length; i += BATCH_SIZE) {
+        if (token && token !== routeToken) return;
+        const batchSids = sids.slice(i, i + BATCH_SIZE);
+        
+        // Load batch
+        const batchDbs = await loadShardsBatch(batchSids, signal);
+        if (token && token !== routeToken) return;
+
+        // Query batch immediately
+        for (const sid of batchSids) {
+          const db = batchDbs.get(sid);
+          if (!db || !db.isOpen()) continue;
+          try {
+            const rows = sqlAll(db, `
+              SELECT id,type,by,time,title,url,score
+              FROM items
+              WHERE ${where}
+              ORDER BY time DESC
+              LIMIT 5000
+            `);
+            all.push(...rows);
+          } catch (err) {
+            console.warn(`Query failed for shard ${sid}:`, err);
+          }
+        }
+        
+        scanned += batchSids.length;
+        // Update status periodically
+        if (scanned % 16 === 0) {
+           setStatus({ text: `Scanning year ${yearRange.year} (${scanned}/${sids.length} shards)…` }, true);
+           await new Promise(r => requestAnimationFrame(() => r()));
+        }
       }
     } else {
       // Build query parameters
@@ -1843,17 +1876,21 @@
 
         for (const sid of batch) {
           const db = shardDbs.get(sid);
-          if (!db) continue;
+          if (!db || !db.isOpen()) continue;
 
-          const rows = sqlAll(db, `
-            SELECT id,type,by,time,title,url,score
-            FROM items
-            WHERE ${where}
-            ${order}
-            LIMIT 250
-          `);
+          try {
+            const rows = sqlAll(db, `
+              SELECT id,type,by,time,title,url,score
+              FROM items
+              WHERE ${where}
+              ${order}
+              LIMIT 250
+            `);
 
-          all.push(...rows);
+            all.push(...rows);
+          } catch (err) {
+            console.warn(`Query failed for shard ${sid}:`, err);
+          }
 
           if (all.length > offset + ITEMS_PER_PAGE + 300) break;
         }
@@ -1900,15 +1937,19 @@
     if (token && token !== routeToken) return;
     for (const [sid, ids] of idsBySid.entries()) {
       const db = commentShardDbs.get(sid);
-      if (!db) continue;
-      const placeholders = ids.map(() => '?').join(',');
-      const counts = sqlAll(db, `
-        SELECT parent_id, COUNT(*) as cnt FROM edges
-        WHERE parent_id IN (${placeholders})
-        GROUP BY parent_id
-      `, ids);
-      for (const c of counts) {
-        commentCounts.set(c.parent_id, (commentCounts.get(c.parent_id) || 0) + c.cnt);
+      if (!db || !db.isOpen()) continue;
+      try {
+        const placeholders = ids.map(() => '?').join(',');
+        const counts = sqlAll(db, `
+          SELECT parent_id, COUNT(*) as cnt FROM edges
+          WHERE parent_id IN (${placeholders})
+          GROUP BY parent_id
+        `, ids);
+        for (const c of counts) {
+          commentCounts.set(c.parent_id, (commentCounts.get(c.parent_id) || 0) + c.cnt);
+        }
+      } catch (err) {
+        console.warn(`Comment count query failed for shard ${sid}:`, err);
       }
     }
 
