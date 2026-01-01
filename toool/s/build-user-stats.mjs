@@ -11,51 +11,112 @@ import path from 'path';
 import os from 'os';
 import zlib from 'zlib';
 import Database from 'better-sqlite3';
+import { Worker } from 'worker_threads';
 
 const BACKUP_STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 
+// Helper to run single blocking query in a worker
+function runQueryInWorker(dbPath, query, params = []) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(path.dirname(process.argv[1]), 'sqlite-worker.js'), {
+      workerData: { action: 'query', dbPath, query, params }
+    });
+    worker.on('message', (msg) => {
+      if (msg.error) reject(new Error(msg.error));
+      else resolve(msg.result);
+    });
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
+    });
+  });
+}
+
 // Progress and spinner utilities
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const MIN_UPDATE_INTERVAL_MS = 2500;
+const MIN_UPDATE_INTERVAL_MS = 100; // Update more frequently (10Hz)
 
 function createProgress(startTime) {
   let spinIdx = 0;
   let lastUpdate = 0;
+  let timer = null;
+  let currentPhase = '';
+  let currentExtra = '';
   
   const elapsed = () => ((Date.now() - startTime) / 1000).toFixed(1);
   const spin = () => SPINNER_FRAMES[spinIdx++ % SPINNER_FRAMES.length];
   
+  // Internal render function
+  const render = () => {
+    process.stdout.write(`\r${spin()} [${elapsed()}s] ${currentPhase}${currentExtra}\x1b[K`);
+  };
+
+  // Start a background timer to keep spinner/clock alive during async waits
+  const startTimer = () => {
+    if (timer) return;
+    timer = setInterval(() => {
+      render();
+    }, 100); // 10Hz refresh
+    timer.unref(); // Don't block exit
+  };
+
+  const stopTimer = () => {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+  
   return {
     elapsed,
     spin,
+    start: () => startTimer(),
+    stop: () => stopTimer(),
+    
     // Progress with known total: current/total
     withTotal(phase, current, total, extra = '') {
-      const now = Date.now();
-      if (now - lastUpdate < MIN_UPDATE_INTERVAL_MS && current < total) return false;
-      lastUpdate = now;
+      currentPhase = phase;
       const pct = total > 0 ? ((current / total) * 100).toFixed(1) : '0.0';
-      const rate = current > 0 ? Math.round(current / ((now - startTime) / 1000)) : 0;
+      const rate = current > 0 ? Math.round(current / ((Date.now() - startTime) / 1000)) : 0;
       const eta = rate > 0 ? Math.round((total - current) / rate) : 0;
       const etaStr = eta > 60 ? `${Math.floor(eta/60)}m${eta%60}s` : `${eta}s`;
-      process.stdout.write(`\r${spin()} [${elapsed()}s] ${phase}: ${current.toLocaleString()}/${total.toLocaleString()} (${pct}%) ${rate.toLocaleString()}/s ETA ${etaStr}${extra}   `);
-      return true;
+      currentExtra = `: ${current.toLocaleString()}/${total.toLocaleString()} (${pct}%) ${rate.toLocaleString()}/s ETA ${etaStr}${extra}`;
+      
+      const now = Date.now();
+      if (now - lastUpdate >= MIN_UPDATE_INTERVAL_MS) {
+        lastUpdate = now;
+        render();
+        return true;
+      }
+      return false;
     },
+    
     // Progress without known total: spinner + time
     withSpinner(phase, extra = '') {
+      currentPhase = phase;
+      currentExtra = extra;
+      
       const now = Date.now();
-      if (now - lastUpdate < MIN_UPDATE_INTERVAL_MS) return false;
-      lastUpdate = now;
-      process.stdout.write(`\r${spin()} [${elapsed()}s] ${phase}${extra}   `);
-      return true;
+      if (now - lastUpdate >= MIN_UPDATE_INTERVAL_MS) {
+        lastUpdate = now;
+        render();
+        return true;
+      }
+      return false;
     },
+    
     // Force update regardless of interval
     force(phase, extra = '') {
+      currentPhase = phase;
+      currentExtra = extra;
       lastUpdate = Date.now();
-      process.stdout.write(`\r${spin()} [${elapsed()}s] ${phase}${extra}   `);
+      render();
     },
+    
     // Complete a phase (newline)
     done(phase, extra = '') {
-      console.log(`\r✓ [${elapsed()}s] ${phase}${extra}   `);
+      // stopTimer(); // Don't stop, let next phase pick it up or manual stop
+      console.log(`\r✓ [${elapsed()}s] ${phase}${extra}\x1b[K`);
     }
   };
 }
@@ -240,24 +301,54 @@ function lowerName(name) {
 async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, keepSqlite, targetBytes }) {
   const startTime = Date.now();
   const progress = createProgress(startTime);
+  progress.start(); // Start background spinner
   
   console.log(`[users] Building from staging DB: ${stagingPath}`);
   
+  // Phase 0: Opening DB
+  progress.force('Phase 0/5: Opening and initializing DB...');
+  await tick();
   const stagingDb = new Database(stagingPath, { readonly: true });
   stagingDb.pragma('cache_size = -500000'); // 500MB cache for faster reads
+  progress.done('Phase 0/5: Opened DB');
   
   await fsp.mkdir(outDir, { recursive: true });
   
   // Phase 1: Count total for progress (async with spinner)
-  progress.force('Phase 1/5: Counting items...');
-  const countStmt = stagingDb.prepare('SELECT COUNT(*) as c FROM items_raw WHERE by IS NOT NULL');
-  await tick(); // yield before blocking query
-  const countRow = countStmt.get();
-  const totalItems = countRow?.c || 0;
+  progress.force('Phase 1/5: Analyzing ID range (initializing)...');
+  
+  // Run blocking range query in worker to keep spinner alive
+  const { minId, maxId } = await runQueryInWorker(stagingPath, 'SELECT MIN(id) as minId, MAX(id) as maxId FROM items_raw') || { minId: 0, maxId: 0 };
+  
+  progress.force('Phase 1/5: Counting items (chunked)...');
+  await tick();
+  
+  let totalItems = 0;
+  const CHUNK_SIZE = 100000;
+  const countStmt = stagingDb.prepare('SELECT COUNT(*) as c FROM items_raw WHERE id >= ? AND id < ? AND by IS NOT NULL');
+  
+  if (minId !== null && maxId !== null) {
+    for (let curr = minId; curr <= maxId; curr += CHUNK_SIZE) {
+      const next = curr + CHUNK_SIZE;
+      const row = countStmt.get(curr, next);
+      totalItems += row.c;
+      
+      // Update progress based on ID range traversal (approximate)
+      const rangeProcessed = Math.min(next - minId, maxId - minId + 1);
+      const rangeTotal = maxId - minId + 1;
+      progress.withTotal('Phase 1/5: Counting items', rangeProcessed, rangeTotal, ` | found ${totalItems.toLocaleString()}`);
+      await tick();
+    }
+  } else {
+    // Fallback if no IDs
+    const fallbackStmt = stagingDb.prepare('SELECT COUNT(*) as c FROM items_raw WHERE by IS NOT NULL');
+    totalItems = fallbackStmt.get()?.c || 0;
+  }
+  
   progress.done('Phase 1/5: Count complete', ` - ${totalItems.toLocaleString()} items`);
   
   // Phase 2: Query sorted by username - this enables streaming aggregation
-  progress.force('Phase 2/5: Preparing sorted query...');
+  progress.force('Phase 2/5: Preparing sorted query (this may block)...');
   await tick();
   
   const stmt = stagingDb.prepare(`
@@ -268,8 +359,11 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
   `);
   
   await tick();
+  
+  // Note: The first iteration will block while SQLite performs the sort
+  console.log('       (Note: SQLite is now sorting rows. This step is blocking and may take a while.)');
   const iter = stmt.iterate();
-  progress.done('Phase 2/5: Query prepared, starting iteration');
+  progress.done('Phase 2/5: Query prepared, starting iteration', ` - ${totalItems.toLocaleString()} rows to process`);
   
   // Shard management
   let shardSid = 0;
@@ -493,6 +587,7 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
     // Yield to event loop periodically for spinner updates
     if (tickCounter >= TICK_EVERY) {
       tickCounter = 0;
+      progress.force('Phase 3/5', `: ${processed.toLocaleString()}/${totalItems.toLocaleString()} (${((processed/totalItems)*100).toFixed(1)}%) | ${totalUsers.toLocaleString()} users`);
       await tick();
     }
   }
@@ -547,6 +642,7 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
       if (!keepSqlite) fs.unlinkSync(sqlitePath);
       done += 1;
       progress.withTotal('Phase 4/5: Gzipping shards', done, total, ` (×${GZIP_CONCURRENCY})`);
+      progress.force('Phase 4/5: Gzipping shards', `: ${done}/${total} (×${GZIP_CONCURRENCY})`);
     });
     progress.done('Phase 4/5: Gzipped', ` ${total} shards`);
   } else {
@@ -592,11 +688,13 @@ async function buildFromStagingDb({ stagingPath, outDir, outManifest, gzipOut, k
   
   const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`✅ Done! ${totalUsers.toLocaleString()} users → ${shardMeta.length} shards in ${totalElapsed}s`);
+  progress.stop();
 }
 
 async function buildManifestFromUserShards({ outDir, outManifest, gzipOut, targetMb }) {
   const startTime = Date.now();
   const progress = createProgress(startTime);
+  progress.start();
   
   const files = fs.readdirSync(outDir)
     .map(name => {
@@ -1053,6 +1151,7 @@ async function main() {
       progress.withTotal('Writing shards', userRows, totalUsers, ` | ${shardMeta.length} shards`);
       if (userTickCounter >= TICK_EVERY) {
         userTickCounter = 0;
+        progress.force('Writing shards', `: ${userRows.toLocaleString()}/${totalUsers.toLocaleString()} | ${shardMeta.length} shards`);
         await tick();
       }
     }
@@ -1096,6 +1195,7 @@ async function main() {
         if (!keepSqlite) fs.unlinkSync(sqlitePath);
         done += 1;
         progress.withTotal('Gzipping shards', done, total, ` (×${GZIP_CONCURRENCY})`);
+        progress.force('Gzipping shards', `: ${done}/${total} (×${GZIP_CONCURRENCY})`);
       });
       progress.done('Gzipped shards', ` ${total} shards`);
     } else {
