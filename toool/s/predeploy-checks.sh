@@ -89,6 +89,26 @@ require_cmd() {
   command -v "${cmd}" >/dev/null 2>&1 || fail "Missing required command: ${cmd}"
 }
 
+require_rg_or_grep() {
+  if command -v rg >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v grep >/dev/null 2>&1; then
+    return 0
+  fi
+  fail "Missing required command: rg or grep"
+}
+
+grep_q() {
+  local pattern="${1}"
+  local file="${2}"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "${pattern}" "${file}"
+  else
+    grep -q "${pattern}" "${file}"
+  fi
+}
+
 is_ci() {
   [[ -n "${GITHUB_ACTIONS:-}" || -n "${CI:-}" ]]
 }
@@ -446,7 +466,7 @@ step "Checking prerequisites"
 require_cmd bash
 require_cmd gzip
 require_cmd node
-require_cmd rg
+require_rg_or_grep
 pass "Core commands available"
 
 # Ensure gcloud is installed
@@ -736,13 +756,13 @@ else
 fi
 
 step "Quick sanity checks"
-if ! rg -q "cross-shard-index.bin.gz" "${DOCS_DIR}/index.html"; then
+if ! grep_q "cross-shard-index.bin.gz" "${DOCS_DIR}/index.html"; then
   fail "index.html missing cross-shard-index.bin.gz reference"
 fi
-if ! rg -q "static-manifest.json.gz" "${DOCS_DIR}/index.html"; then
+if ! grep_q "static-manifest.json.gz" "${DOCS_DIR}/index.html"; then
   fail "index.html missing static-manifest.json.gz reference"
 fi
-if ! rg -q "static-user-stats-manifest.json.gz" "${DOCS_DIR}/index.html"; then
+if ! grep_q "static-user-stats-manifest.json.gz" "${DOCS_DIR}/index.html"; then
   fail "index.html missing static-user-stats-manifest.json.gz reference"
 fi
 pass "HTML references OK"
