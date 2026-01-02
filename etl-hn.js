@@ -783,6 +783,17 @@ async function main() {
     console.log(`[1/3] Staging + sorting by id into ${STAGING_PATH}`);
     stagedDb = initStagingDb(STAGING_PATH);
     await stageAllInput(stagedDb, files);
+    if (CI_MODE) {
+      console.log(`[stage] CI mode: removing raw .json.gz inputs to save disk`);
+      for (const filename of files) {
+        const fullPath = path.join(DATA_DIR, filename);
+        try {
+          fs.unlinkSync(fullPath);
+        } catch (err) {
+          console.warn(`[stage] failed to remove ${fullPath}: ${err && err.message ? err.message : err}`);
+        }
+      }
+    }
 
     console.log(`[2/3] Sharding from staging ORDER BY id`);
     iter = stagedDb.prepare(`
