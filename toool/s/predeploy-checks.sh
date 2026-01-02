@@ -113,6 +113,23 @@ is_ci() {
   [[ -n "${GITHUB_ACTIONS:-}" || -n "${CI:-}" ]]
 }
 
+# CI log throttling state
+declare -A CI_LAST_LOG=()
+should_emit_ci() {
+  local key="${1:-default}"
+  if ! is_ci; then
+    return 0
+  fi
+  local now
+  now=$(date +%s)
+  local last="${CI_LAST_LOG[$key]:-0}"
+  if (( now - last >= 5 )); then
+    CI_LAST_LOG[$key]="${now}"
+    return 0
+  fi
+  return 1
+}
+
 cleanup_if_ci() {
   if ! is_ci; then
     return 0
@@ -429,7 +446,9 @@ NODE
   for f in "${files[@]}"; do
     i=$((i+1))
     local full="${shards_dir}/${f}"
-    printf "\r🧪 %s %d/%d" "${label}" "${i}" "${#files[@]}"
+    if ! is_ci || should_emit_ci "validate-${label}"; then
+      printf "\r🧪 %s %d/%d" "${label}" "${i}" "${#files[@]}"
+    fi
     [[ -f "${full}" ]] || fail "Missing ${label} shard file: ${full}"
     gzip_test "${full}"
   done
