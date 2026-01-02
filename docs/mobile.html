@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta name="referrer" content="origin">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Hacker Book — Community, All the HN Belong to You! 2006 - 2025 FOREVER</title>
   <link rel="icon" type="image/png" href="cd.png?v=20251230">
   <link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
@@ -40,8 +40,16 @@
       display: flex;
       align-items: center;
       height: 100%;
+      gap: 4px;
     }
-    .pagetop a { color:#000; }
+    .pagetop a {
+      color:#000;
+      display: inline-block;
+      padding: 6px 10px;
+      margin: 0 2px;
+      border-radius: 8px;
+      line-height: 1.2;
+    }
     .pagetop a:hover { text-decoration:none; }
     .hnname a { font-weight:bold; }
     .itemlist { width:100%; }
@@ -98,10 +106,14 @@
     .archive-badge {
       background: #9a9a9a;
       color: #fff;
-      font-size: 7pt;
-      padding: 1px 4px;
-      border-radius: 2px;
-      font-weight: normal;
+      font-size: 8pt;
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
     }
     .archive-badge-link { text-decoration: none; display: flex; }
     .archive-badge-link:hover { text-decoration: none; }
@@ -154,7 +166,13 @@
       color: #828282;
       text-decoration: none;
       margin-left: 4px;
-      font-size: 8pt;
+      font-size: 10pt;
+      border: 1px solid #d0d0d0;
+      border-radius: 8px;
+      padding: 4px 6px;
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
     }
     .yclinks {
       font-size: 8pt;
@@ -252,25 +270,32 @@
       display: block;
     }
     #year-input {
-      max-height: 16px;
+      max-height: none;
+      min-height: 38px;
+      min-width: 86px;
       box-sizing: border-box;
       transform: translateY(-1px);
+      padding: 6px 8px !important;
     }
     .warp-input {
       font-family: ui-monospace, Menlo, Consolas, monospace;
       font-size: 10pt;
       border: 1px solid #828282;
-      padding: 2px;
+      padding: 8px 10px;
       text-align: right;
+      min-height: 40px;
+      border-radius: 8px;
+      box-sizing: border-box;
     }
     .warp-input.top {
-      font-size: 8pt;
-      padding: 1px 2px;
-      width: 120px;
+      font-size: 10pt;
+      padding: 8px 10px;
+      width: 150px;
+      min-height: 40px;
     }
     .warp-input.top.warp-date {
-      width: 110px;
-      max-width: 110px;
+      width: 140px;
+      max-width: 140px;
       min-width: 0;
     }
     .warp-form {
@@ -280,18 +305,21 @@
     .warp-form.top {
       display: inline-flex;
       align-items: center;
-      gap: 2px;
+      gap: 6px;
       margin: 0;
     }
     .time-step {
       font-family: Verdana, Geneva, sans-serif;
-      font-size: 10pt;
+      font-size: 11pt;
       border: 1px solid #828282;
       background: #f6f6ef;
       color: #828282;
-      padding: 1px 4px;
-      margin: 0 1px;
+      padding: 10px 12px;
+      margin: 0 2px;
       cursor: pointer;
+      border-radius: 8px;
+      min-height: 40px;
+      min-width: 42px;
     }
     .logo-cell {
       width: 18px;
@@ -439,7 +467,7 @@
       .topbar > table > tbody > tr {
         display: flex;
         align-items: center;
-        gap: 2.5px;
+        gap: 6px;
       }
       .topbar > table > tbody > tr > td { display: block; }
       .logo-cell {
@@ -465,7 +493,7 @@
       .archive-badge-link { grid-row: 3; grid-column: 2; }
       .archive-badge { grid-row: 3; grid-column: 2; font-size: 8pt; }
       .warp-input, .time-step { font-size: 16px; }
-      .warp-input.top { width: 140px; }
+      .warp-input.top { width: 170px; }
       body[data-view="archive"] #content-table > tbody > tr > td {
         padding-left: 6px !important;
         padding-right: 6px !important;
@@ -509,7 +537,7 @@
         word-break: break-word;
         overflow-wrap: anywhere;
       }
-      .warp-input.top.warp-date { width: 104px; max-width: 104px; }
+      .warp-input.top.warp-date { width: 150px; max-width: 150px; }
       .footer-info { text-align: center; font-size: 10px; }
       .yclinks { font-size: 10px; padding-bottom: 12px; }
       .nav-wrap { flex-wrap: wrap; }
@@ -550,7 +578,7 @@
                   <a href="?view=ask" data-spa>ask</a> |
                   <a href="?view=show" data-spa>show</a> |
                   <a href="?view=jobs" data-spa>jobs</a> |
-                  <select id="year-input" class="warp-input top" title="Year view" style="width:58px; background-color:silver; border-radius: 0; padding: 0 2px 0 0;"></select>
+                  <select id="year-input" class="warp-input top" title="Year view" style="width:86px; background-color:silver; border-radius: 0; padding: 0 2px 0 0;"></select>
                   |
                   <a href="?view=query" data-spa>query</a> |
                   <a href="?view=me" data-spa id="me-link">me</a>
@@ -611,7 +639,7 @@
         </div>
         <div class="subtext footer-info" id="statsInfo"></div>
         <div class="subtext footer-info">
-          Made by <a class="stealth-link" href="https://dosaygo.com">DOSAYGO</a> · <a class="stealth-link" href="https://dosaygo-studio.github.io/HackerBook/">[GET THIS]</a> · <a class="stealth-link" href="mobile.html">Mobile</a>
+          Made by <a class="stealth-link" href="https://dosaygo.com">DOSAYGO</a> · <a class="stealth-link" href="https://dosaygo-studio.github.io/HackerBook/">[GET THIS]</a> · <a class="stealth-link" href="index.html">Desktop</a>
         </div>
       </td>
     </tr>
