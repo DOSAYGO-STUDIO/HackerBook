@@ -7,11 +7,19 @@ const Database = require('better-sqlite3');
 
 const BACKUP_STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 
-const manifestPath = path.join('docs', 'static-manifest.json');
+const manifestJsonPath = path.join('docs', 'static-manifest.json');
+const manifestGzPath = path.join('docs', 'static-manifest.json.gz');
+const manifestPath = fs.existsSync(manifestJsonPath) ? manifestJsonPath : manifestGzPath;
 const shardsDir = path.join('docs', 'static-shards');
 const outPath = path.join('docs', 'archive-index.json');
 
-const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+function readJsonMaybeGz(p) {
+  let raw = fs.readFileSync(p);
+  if (p.endsWith('.gz')) raw = zlib.gunzipSync(raw);
+  return JSON.parse(raw.toString('utf8'));
+}
+
+const manifest = readJsonMaybeGz(manifestPath);
 const shards = manifest.shards || [];
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'static-news-archive-'));
 const tempFiles = new Set();
@@ -32,6 +40,7 @@ const out = {
 
 const manifestFiles = [
   { file: 'static-manifest.json', note: 'Shard metadata, ranges, and snapshot time.' },
+  { file: 'static-manifest.json.gz', note: 'Gzipped shard metadata, ranges, and snapshot time.' },
   { file: 'filter-manifest.json', note: 'Prime filter data for the main view.' }
 ];
 

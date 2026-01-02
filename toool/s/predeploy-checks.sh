@@ -560,6 +560,10 @@ confirm_step "Run full ETL now? (etl-hn.js --gzip)" in_repo node ./etl-hn.js --g
 
 # Cleanup raw data in CI after ETL completes
 if is_ci; then
+  shard_gz_count="$(count_glob "${DOCS_DIR}/static-shards/*.sqlite.gz")"
+  if [[ "${shard_gz_count}" -eq 0 ]]; then
+    fail "CI requires gzipped shards; ensure ETL runs with --gzip before cleanup."
+  fi
   cleanup_if_ci "${RAW_DIR_PRIMARY}"
   cleanup_if_ci "${RAW_DIR_ALT}"
   # Cleanup any leftover uncompressed shards

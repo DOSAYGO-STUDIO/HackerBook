@@ -66,8 +66,10 @@ function parseArgs(argv) {
   return out;
 }
 
-function readJson(p) {
-  return JSON.parse(fs.readFileSync(p, 'utf8'));
+function readJsonMaybeGz(p) {
+  let raw = fs.readFileSync(p);
+  if (p.endsWith('.gz')) raw = zlib.gunzipSync(raw);
+  return JSON.parse(raw.toString('utf8'));
 }
 
 function ensureWritableOrBackup(filePath) {
@@ -105,7 +107,11 @@ async function main() {
     console.error('Choose only one output format: --json or --binary (default is sqlite).');
     process.exit(1);
   }
-  const manifestPath = path.resolve(args.manifest);
+  let manifestPath = path.resolve(args.manifest);
+  if (!fs.existsSync(manifestPath) && manifestPath.endsWith('.json')) {
+    const gzPath = `${manifestPath}.gz`;
+    if (fs.existsSync(gzPath)) manifestPath = gzPath;
+  }
   const shardsDir = path.resolve(args.shardsDir);
   let outPath = path.resolve(args.out);
   const hasOutFlag = process.argv.includes('--out');
@@ -120,7 +126,7 @@ async function main() {
     process.exit(1);
   }
 
-  const manifest = readJson(manifestPath);
+  const manifest = readJsonMaybeGz(manifestPath);
   const shards = (manifest.shards || []).slice().sort((a, b) => a.sid - b.sid);
   if (!shards.length) {
     console.error('No shards found in manifest.');
