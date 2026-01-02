@@ -21,9 +21,10 @@ if ! test -d node_modules || ! test -f node_modules/better-sqlite3/build/Release
   npm i
 fi
 
-CUSTOM_DOMAIN="${CUSTOM_DOMAIN:-hnbackuptape.dosaygo.com}"
+CUSTOM_DOMAIN="${CUSTOM_DOMAIN:-hackerbook.dosaygo.com}"
 EXPECTED_CNAME="${EXPECTED_CNAME:-static-news-dtg.pages.dev}"
 PAGES_PROJECT_NAME="${PAGES_PROJECT_NAME:-static-news}"
+GCLOUD_PROJECT="${GCLOUD_PROJECT:-gen-lang-client-0975245085}"
 BACKUP_STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 
 for arg in "$@"; do
@@ -93,10 +94,24 @@ ensure_gcloud() {
     return 0
   fi
   warn "gcloud not found"
+
+  # Detect platform
   if command -v brew >/dev/null 2>&1; then
+    # macOS with Homebrew
     confirm_step "Install gcloud via brew? (google-cloud-sdk)" brew install --cask google-cloud-sdk
+  elif command -v apt-get >/dev/null 2>&1; then
+    # Ubuntu/Debian
+    warn "Installing gcloud via apt-get (requires sudo)"
+    confirm_step "Install gcloud via apt-get?" bash -c '
+      sudo apt-get update && \
+      sudo apt-get install -y apt-transport-https ca-certificates gnupg curl && \
+      curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
+      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+      sudo apt-get update && \
+      sudo apt-get install -y google-cloud-cli
+    '
   else
-    warn "Homebrew not found. Install gcloud from https://cloud.google.com/sdk/docs/install"
+    warn "No supported package manager found. Install gcloud from https://cloud.google.com/sdk/docs/install"
     return 1
   fi
   command -v gcloud >/dev/null 2>&1 || return 1
@@ -106,17 +121,106 @@ ensure_gcloud_auth() {
   if ! command -v gcloud >/dev/null 2>&1; then
     return 1
   fi
+
+  # Check for service account key in environment (for CI)
+  if [[ -n "${GCLOUD_SERVICE_ACCOUNT_KEY:-}" ]]; then
+    local key_file="/tmp/gcloud-service-account-$$.json"
+    printf "%s" "${GCLOUD_SERVICE_ACCOUNT_KEY}" > "${key_file}"
+    if gcloud auth activate-service-account --key-file="${key_file}" >/dev/null 2>&1; then
+      rm -f "${key_file}"
+      local acct
+      acct="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
+      pass "gcloud auth OK via service account (${acct})"
+      # Set project
+      if [[ -n "${GCLOUD_PROJECT:-}" ]]; then
+        gcloud config set project "${GCLOUD_PROJECT}" >/dev/null 2>&1 || warn "Failed to set project ${GCLOUD_PROJECT}"
+        pass "gcloud project set to ${GCLOUD_PROJECT}"
+      fi
+      return 0
+    else
+      rm -f "${key_file}"
+      warn "Failed to authenticate with GCLOUD_SERVICE_ACCOUNT_KEY"
+    fi
+  fi
+
+  # Check existing auth
   local acct=""
   acct="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
   if [[ -n "${acct}" ]]; then
     pass "gcloud auth OK (${acct})"
+    # Set project
+    if [[ -n "${GCLOUD_PROJECT:-}" ]]; then
+      local current_project
+      current_project="$(gcloud config get-value project 2>/dev/null || true)"
+      if [[ "${current_project}" != "${GCLOUD_PROJECT}" ]]; then
+        gcloud config set project "${GCLOUD_PROJECT}" >/dev/null 2>&1 || warn "Failed to set project ${GCLOUD_PROJECT}"
+        pass "gcloud project set to ${GCLOUD_PROJECT}"
+      else
+        pass "gcloud project already set to ${GCLOUD_PROJECT}"
+      fi
+    fi
     return 0
   fi
+
+  # Interactive login
   warn "gcloud not authenticated"
   confirm_step "Run 'gcloud auth login' now?" gcloud auth login
   acct="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
   [[ -n "${acct}" ]] || fail "gcloud auth still missing"
   pass "gcloud auth OK (${acct})"
+  # Set project
+  if [[ -n "${GCLOUD_PROJECT:-}" ]]; then
+    gcloud config set project "${GCLOUD_PROJECT}" >/dev/null 2>&1 || warn "Failed to set project ${GCLOUD_PROJECT}"
+    pass "gcloud project set to ${GCLOUD_PROJECT}"
+  fi
+}
+
+ensure_wrangler() {
+  if command -v wrangler >/dev/null 2>&1; then
+    return 0
+  fi
+  warn "wrangler not found"
+
+  # Check if npm is available
+  if ! command -v npm >/dev/null 2>&1; then
+    warn "npm not found; cannot auto-install wrangler"
+    return 1
+  fi
+
+  confirm_step "Install wrangler globally via npm?" npm install -g wrangler
+  command -v wrangler >/dev/null 2>&1 || return 1
+}
+
+ensure_wrangler_auth() {
+  if ! command -v wrangler >/dev/null 2>&1; then
+    return 1
+  fi
+
+  # Check for API token in environment (for CI)
+  if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+    # Wrangler automatically uses CLOUDFLARE_API_TOKEN from environment
+    # Verify it works by checking whoami
+    if wrangler whoami >/dev/null 2>&1; then
+      pass "wrangler auth OK via CLOUDFLARE_API_TOKEN"
+      return 0
+    else
+      warn "CLOUDFLARE_API_TOKEN set but authentication failed"
+    fi
+  fi
+
+  # Check if already authenticated
+  if wrangler whoami >/dev/null 2>&1; then
+    pass "wrangler auth OK"
+    return 0
+  fi
+
+  # Interactive login
+  warn "wrangler not authenticated"
+  confirm_step "Run 'wrangler login' now?" wrangler login
+  if ! wrangler whoami >/dev/null 2>&1; then
+    fail "wrangler auth still missing"
+  fi
+  pass "wrangler auth OK"
 }
 
 require_file() {
@@ -328,10 +432,21 @@ require_cmd bash
 require_cmd gzip
 require_cmd node
 require_cmd rg
-if ! command -v wrangler >/dev/null 2>&1; then
-  warn "wrangler not found (deploy step can be skipped)"
-fi
 pass "Core commands available"
+
+# Ensure gcloud is installed
+if ensure_gcloud; then
+  pass "gcloud available"
+else
+  warn "gcloud not available; raw data download may be skipped"
+fi
+
+# Ensure wrangler is installed
+if ensure_wrangler; then
+  pass "wrangler available"
+else
+  warn "wrangler not available; deploy step will be skipped"
+fi
 
 step "Checking raw data"
 mkdir -p "${RAW_DIR_PRIMARY}" "${RAW_DIR_ALT}"
@@ -413,15 +528,16 @@ else
     warn "Using toool/data/raw; ETL will be run with --data \"${RAW_DIR}\""
   else
     warn "No raw data found in data/raw/*.json.gz (or toool/data/raw/*.json.gz)"
-    if ensure_gcloud; then
-      ensure_gcloud_auth
-    fi
-    confirm_step "Run download script now? (download_hn.sh)" bash -lc "cd \"${REPO_DIR}\" && bash ./download_hn.sh"
-    raw_primary_count="$(count_glob "${RAW_DIR_PRIMARY}/*.json.gz")"
-    if [[ "${raw_primary_count}" -gt 0 ]]; then
-      pass "Downloaded ${raw_primary_count} raw files"
+    if ensure_gcloud && ensure_gcloud_auth; then
+      confirm_step "Run download script now? (download_hn.sh)" bash -lc "cd \"${REPO_DIR}\" && bash ./download_hn.sh"
+      raw_primary_count="$(count_glob "${RAW_DIR_PRIMARY}/*.json.gz")"
+      if [[ "${raw_primary_count}" -gt 0 ]]; then
+        pass "Downloaded ${raw_primary_count} raw files"
+      else
+        warn "No raw data available; ETL step may fail if you run it."
+      fi
     else
-      warn "No raw data available; ETL step may fail if you run it."
+      warn "gcloud not authenticated; skipping raw data download"
     fi
   fi
 
@@ -647,10 +763,10 @@ pause "Smoke UI locally (/ , ?view=query, ?view=user&id=pg, ?view=archive). Pres
 step "Checking custom domain CNAME"
 confirm_step "Check DNS now? (${CUSTOM_DOMAIN} → ${EXPECTED_CNAME})" check_cname "${CUSTOM_DOMAIN}" "${EXPECTED_CNAME}"
 
-if command -v wrangler >/dev/null 2>&1; then
+if command -v wrangler >/dev/null 2>&1 && ensure_wrangler_auth; then
   confirm_step "Deploy now? (wrangler pages deploy)" in_repo wrangler pages deploy docs --project-name "${PAGES_PROJECT_NAME}" --commit-dirty=true
 else
-  warn "wrangler not found; skipping deploy step"
+  warn "wrangler not available or not authenticated; skipping deploy step"
 fi
 
 log ""
