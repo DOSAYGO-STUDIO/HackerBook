@@ -38,12 +38,14 @@ function runQueryInWorker(dbPath, query, params = [], action = 'query') {
   });
 }
 
-// Worker entry point
+// Worker entry point - workers MUST exit after runWorker, never fall through to main()
 if (!isMainThread) {
-  runWorker(workerData).catch(err => {
-    console.error(err);
-    process.exit(1);
-  });
+  runWorker(workerData)
+    .then(() => process.exit(0))
+    .catch(err => {
+      console.error(err);
+      process.exit(1);
+    });
 }
 
 async function runWorker({ workerId, stagingPath, outDir, startUser, endUser, targetBytes, totalEst }) {
@@ -1536,7 +1538,10 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+// Only run main() in the main thread (workers exit after runWorker)
+if (isMainThread) {
+  main().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}
