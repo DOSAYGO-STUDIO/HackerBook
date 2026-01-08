@@ -14,7 +14,7 @@
   "scripts": {
     "etl": "node etl-hn.js --gzip",
     "sync-docs": "cp docs/static.html docs/index.html",
-    "serve": "npx serve docs -s -c 0"
+    "serve": "npx serve docs -s"
   },
   "dependencies": {
     "better-sqlite3": "latest"
