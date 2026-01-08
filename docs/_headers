@@ -1,3 +1,21 @@
+/*.html
+  Cache-Control: no-cache, must-revalidate
+
+/
+  Cache-Control: no-cache, must-revalidate
+
+/index
+  Cache-Control: no-cache, must-revalidate
+
+/static
+  Cache-Control: no-cache, must-revalidate
+
+/mobile
+  Cache-Control: no-cache, must-revalidate
+
+/support
+  Cache-Control: no-cache, must-revalidate
+
 /jswasm/*.wasm
   Content-Type: application/wasm
 
