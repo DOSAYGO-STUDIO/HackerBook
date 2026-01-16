@@ -721,7 +721,7 @@ async function main() {
       if (RUN_ARCHIVE_INDEX) {
         try {
           console.log(`[post] building archive index...`);
-          require("./build-archive-index.js");
+          require("./build-archive-index.cjs");
         } catch (err) {
           console.warn(`[post] archive index failed: ${err && err.message ? err.message : err}`);
         }
@@ -745,7 +745,7 @@ async function main() {
         if (RUN_ARCHIVE_INDEX) {
           try {
             console.log(`[post] building archive index...`);
-            require("./build-archive-index.js");
+            require("./build-archive-index.cjs");
           } catch (err) {
             console.warn(`[post] archive index failed: ${err && err.message ? err.message : err}`);
           }
@@ -765,7 +765,7 @@ async function main() {
     if (RUN_ARCHIVE_INDEX) {
       try {
         console.log(`[post] building archive index...`);
-        require("./build-archive-index.js");
+        require("./build-archive-index.cjs");
       } catch (err) {
         console.warn(`[post] archive index failed: ${err && err.message ? err.message : err}`);
       }
@@ -1137,7 +1137,7 @@ async function main() {
   if (RUN_ARCHIVE_INDEX) {
     try {
       console.log(`[post] building archive index...`);
-      require("./build-archive-index.js");
+      require("./build-archive-index.cjs");
     } catch (err) {
       console.warn(`[post] archive index failed: ${err && err.message ? err.message : err}`);
     }

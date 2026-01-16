@@ -113,8 +113,8 @@ npm run serve
 - `docs/static-user-stats-shards/`: user stats shards
 - `data/`: raw dumps + staging DB
 - `download_hn.sh`: BigQuery export helper
-- `etl-hn.js`: main shard builder + post-pass
-- `build-archive-index.js`: archive index builder
+- `etl-hn.cjs`: main shard builder + post-pass
+- `build-archive-index.cjs`: archive index builder
 - `toool/s/`: scripts for predeploy, index builds, downloads
 
 ## Pipeline overview
@@ -168,7 +168,7 @@ The build pipeline uses parallel workers to stream data from the staging DB, agg
 The app switches to these shards for the `?view=me` view and when you select "User stats shards" in query mode.
 
 ## Index builders
-- Archive index: `node ./build-archive-index.js`
+- Archive index: `node ./build-archive-index.cjs`
 - Cross-shard index: `node ./toool/s/build-cross-shard-index.mjs --binary`
 - User stats: `node ./toool/s/build-user-stats.mjs --gzip --target-mb 15`
 
@@ -192,7 +192,7 @@ Parquet would make sense for a supplementary "Data Export" feature for data scie
 ```mermaid
 graph TD
   BQ[BigQuery Public Dataset] -->|download_hn.sh| Raw[data/raw/*.json.gz]
-  Raw -->|etl-hn.js| Shards[SQLite Shards]
+  Raw -->|etl-hn.cjs| Shards[SQLite Shards]
   Shards -->|Post-pass| GzShards[Gzipped Shards]
   GzShards --> Manifest[static-manifest.json]
 ```
@@ -200,7 +200,7 @@ graph TD
 ### Shard + index flow
 ```mermaid
 graph TD
-  Shards[static-shards/] --> Archive[build-archive-index.js]
+  Shards[static-shards/] --> Archive[build-archive-index.cjs]
   Shards --> Cross[build-cross-shard-index.mjs]
   Shards --> UserStats[build-user-stats.mjs]
   

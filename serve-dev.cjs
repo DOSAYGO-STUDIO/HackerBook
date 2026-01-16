@@ -1,11 +1,9 @@
 #!/usr/bin/env node
-import { createServer } from 'http';
-import { readFile, stat } from 'fs/promises';
-import { join, extname } from 'path';
-import { fileURLToPath } from 'url';
+const { createServer } = require('http');
+const { readFile, stat } = require('fs/promises');
+const { join, extname } = require('path');
 
 const PORT = process.env.PORT || 3000;
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DOCS_DIR = join(__dirname, 'docs');
 
 const MIME_TYPES = {

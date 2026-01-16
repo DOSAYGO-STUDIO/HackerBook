@@ -25,7 +25,7 @@ const BACKUP_STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 // Helper to run single blocking query in a worker
 function runQueryInWorker(dbPath, query, params = [], action = 'query') {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(path.join(__dirname, 'sqlite-worker.js'), {
+    const worker = new Worker(path.join(__dirname, 'sqlite-worker.cjs'), {
       workerData: { action, dbPath, query, params }
     });
     worker.on('message', (msg) => {

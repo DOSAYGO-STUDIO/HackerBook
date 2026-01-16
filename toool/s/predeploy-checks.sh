@@ -581,7 +581,7 @@ if [[ "${RESTART_ETL}" -eq 1 ]]; then
   fi
   pass "Restarting ETL post-pass from existing shards"
   post_concurrency="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-  confirm_step "Restart ETL post-pass now? (etl-hn.js --restart --gzip)" in_repo node ./etl-hn.js --restart --gzip --post-concurrency "${post_concurrency}"
+  confirm_step "Restart ETL post-pass now? (etl-hn.cjs --restart --gzip)" in_repo node ./etl-hn.cjs --restart --gzip --post-concurrency "${post_concurrency}"
 elif [[ "${FROM_SHARDS}" -eq 1 ]]; then
   shard_sqlite_count="$(count_glob "${DOCS_DIR}/static-shards/*.sqlite")"
   shard_gz_count="$(count_glob "${DOCS_DIR}/static-shards/*.sqlite.gz")"
@@ -594,7 +594,7 @@ elif [[ "${FROM_SHARDS}" -eq 1 ]]; then
   else
     pass "Rebuilding from existing shards (post-pass + gzip)"
     post_concurrency="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-    confirm_step "Finalize shards now? (etl-hn.js --restart --gzip)" in_repo node ./etl-hn.js --restart --gzip --post-concurrency "${post_concurrency}"
+    confirm_step "Finalize shards now? (etl-hn.cjs --restart --gzip)" in_repo node ./etl-hn.cjs --restart --gzip --post-concurrency "${post_concurrency}"
   fi
 elif [[ "${USE_STAGING}" -eq 1 ]]; then
   if [[ -f "${REPO_DIR}/data/static-staging-hn.sqlite" ]]; then
@@ -603,7 +603,7 @@ elif [[ "${USE_STAGING}" -eq 1 ]]; then
     fail "Staging DB not found: ${REPO_DIR}/data/static-staging-hn.sqlite"
   fi
   warn "Skipping raw download; ETL will run with --from-staging"
-  confirm_step "Run full ETL now? (etl-hn.js --gzip --from-staging)" in_repo node ./etl-hn.js --gzip --from-staging
+  confirm_step "Run full ETL now? (etl-hn.cjs --gzip --from-staging)" in_repo node ./etl-hn.cjs --gzip --from-staging
 else
   raw_primary_count="$(count_glob "${RAW_DIR_PRIMARY}/*.json.gz")"
   raw_alt_count="$(count_glob "${RAW_DIR_ALT}/*.json.gz")"
@@ -629,7 +629,7 @@ else
     fi
   fi
 
-confirm_step "Run full ETL now? (etl-hn.js --gzip)" in_repo node ./etl-hn.js --gzip --data "${RAW_DIR}"
+confirm_step "Run full ETL now? (etl-hn.cjs --gzip)" in_repo node ./etl-hn.cjs --gzip --data "${RAW_DIR}"
 
 # Cleanup raw data in CI after ETL completes
 if is_ci; then
@@ -669,7 +669,7 @@ should_rebuild_archive_index() {
 }
 
 if should_rebuild_archive_index; then
-  confirm_step "Rebuild archive index now? (build-archive-index.js)" in_repo node ./build-archive-index.js
+  confirm_step "Rebuild archive index now? (build-archive-index.cjs)" in_repo node ./build-archive-index.cjs
 else
   pass "Archive index newer than manifest; skipping rebuild"
 fi
@@ -687,7 +687,7 @@ elif [[ -f "${archive_gz}" ]]; then
   fi
   pass "archive-index.json.gz already present; skipping gzip"
 else
-  warn "Missing archive-index.json; run build-archive-index.js"
+  warn "Missing archive-index.json; run build-archive-index.cjs"
 fi
 
 confirm_step "Rebuild cross-shard index now? (build-cross-shard-index.mjs --binary)" in_repo node ./toool/s/build-cross-shard-index.mjs --binary
@@ -769,7 +769,7 @@ elif [[ -f "${static_manifest_gz}" ]]; then
   fi
   pass "static-manifest.json.gz already present; skipping gzip"
 else
-  warn "Missing static-manifest.json; run etl-hn.js --rebuild-manifest"
+  warn "Missing static-manifest.json; run etl-hn.cjs --rebuild-manifest"
 fi
 
 step "Checking required files"

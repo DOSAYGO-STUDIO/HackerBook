@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * fix-manifest-raw-bytes.js
+ * fix-manifest-raw-bytes.cjs
  * 
  * Updates raw_bytes_est in static-manifest.json by decompressing gzipped shards
  * to determine their uncompressed size.
  * 
  * Usage:
- *   node fix-manifest-raw-bytes.js [manifest-path]
+ *   node fix-manifest-raw-bytes.cjs [manifest-path]
  * 
  * Default manifest path: docs/static-manifest.json
  */

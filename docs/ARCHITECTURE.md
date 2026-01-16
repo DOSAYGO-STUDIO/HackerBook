@@ -180,5 +180,5 @@ But for the **interactive web application**, SQLite + small shards + aggressive 
 ## References
 
 - Query patterns extracted from: `docs/*.html`
-- Build process: `etl-hn.js`, `build-user-stats.mjs`
+- Build process: `etl-hn.cjs`, `build-user-stats.mjs`
 - Shard management: `toool/s/predeploy-checks.sh`

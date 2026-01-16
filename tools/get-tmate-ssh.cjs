@@ -106,7 +106,7 @@ const runId = process.argv[2];
 const repo = process.argv[3];
 
 if (!runId || !repo) {
-  console.error('Usage: get-tmate-ssh.js <run-id> <repo>');
+  console.error('Usage: get-tmate-ssh.cjs <run-id> <repo>');
   process.exit(1);
 }
 

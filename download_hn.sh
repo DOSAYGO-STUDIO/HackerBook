@@ -183,4 +183,4 @@ echo ""
 echo "Cleaning up cloud resources..."
 gsutil rm -r "gs://$BUCKET_NAME" >/dev/null
 
-echo "SUCCESS. You are ready for 'node etl-hn.js'."
+echo "SUCCESS. You are ready for 'node etl-hn.cjs'."

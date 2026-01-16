@@ -26,7 +26,7 @@ WAIT_SECONDS_EXPLICIT="false"
 TARGET_REF=""
 REPO=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
-PUPPETEER_SCRIPT="$SCRIPT_DIR/get-tmate-ssh.js"
+PUPPETEER_SCRIPT="$SCRIPT_DIR/get-tmate-ssh.cjs"
 
 # SSH robustness options applied to the tmate SSH command
 SSH_ROBUST="${SSH_ROBUST:-true}"

@@ -13,9 +13,9 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "etl": "node etl-hn.js --gzip",
+    "etl": "node etl-hn.cjs --gzip",
     "sync-docs": "cp docs/static.html docs/index.html",
-    "serve": "node serve-dev.js"
+    "serve": "node serve-dev.cjs"
   },
   "dependencies": {
     "better-sqlite3": "latest"
