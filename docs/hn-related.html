@@ -4,14 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HN Related - HackerBook</title>
+  <meta name="description" content="Discover related Hacker News discussions clustered by topic. Find stories that sparked multiple conversations over the years.">
+  <meta property="og:title" content="HN Related - HackerBook">
+  <meta property="og:description" content="Discover related Hacker News discussions clustered by topic. Find stories that sparked multiple conversations over the years.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="HN Related - HackerBook">
+  <meta name="twitter:description" content="Discover related Hacker News discussions clustered by topic.">
+  <link rel="icon" type="image/png" href="cd.png">
   <style>
     body { margin: 0; font: 10pt Verdana, Geneva, sans-serif; background: #f6f6ef; color: #000; }
     a { color: #000; text-decoration: none; }
     a:hover { text-decoration: underline; }
     #hnmain { width: 85%; margin: 8px auto; background: #f6f6ef; }
-    .topbar { background: #ff6600; padding: 6px 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .topbar {
+      background: linear-gradient(to right,
+        #ff6600 0%,
+        #ff6600 20%,
+        #ffef00 50%,
+        #fffef0 75%,
+        #ffffff 82%,
+        #8b00ff 88%,
+        #4400ff 90%,
+        #00bfff 93%,
+        #00ff00 95%,
+        #ffff00 97%,
+        #ff8000 98.5%,
+        #ff0000 100%
+      );
+      padding: 6px 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+    }
     .topbar .left, .topbar .right { display: flex; gap: 8px; align-items: center; }
-    .name { font-weight: 700; }
+    .name { font-weight: 700; display: flex; align-items: center; gap: 4px; }
+    .logo-icon { width: 16px; height: 16px; image-rendering: pixelated; }
     .box { background: #f6f6ef; border: 0; }
     .row { margin: 0 0 12px 0; }
     .title { font-size: 10pt; }
@@ -19,6 +44,7 @@
     .sub { color: #828282; font-size: 8.5pt; margin-top: 2px; }
     .sitebit { color: #828282; font-size: 8.5pt; }
     .sitestr { color: #828282; }
+    .sublink { color: #828282; }
     .pager { margin: 14px 0 20px 0; color: #828282; }
     .pager a { color: #000; }
     .timeline { position: relative; padding-left: 26px; margin-top: 4px; }
@@ -62,11 +88,50 @@
     .mono { font-family: Menlo, Monaco, Consolas, monospace; }
     .hint { color: #666; font-size: 8.5pt; }
     #snapshot { color: #000; }
+    #loading-status { color: #fff; font-size: 8pt; font-family: ui-monospace, Menlo, Consolas, monospace; margin-left: 8px; }
     #top-sort, #top-years { font: 8.5pt Verdana, Geneva, sans-serif; }
-    #top-years { min-width: 78px; height: 20px; }
-    #top-years-apply { font: 8.5pt Verdana, Geneva, sans-serif; height: 20px; }
+    .years-wrap { position: relative; display: inline-block; }
+    #top-years {
+      height: 20px;
+      line-height: 20px;
+      text-align: center;
+      padding-top: 2px;
+      width: 11ch;
+    }
+    #top-years.expanded {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: auto;
+      width: auto;
+      min-width: 11ch;
+      z-index: 100;
+      background: #fff;
+      border: 1px solid #999;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    #top-years-clear { font: 8.5pt Verdana, Geneva, sans-serif; height: 20px; }
+    /* Mobile: larger tap targets */
+    @media (max-width: 768px) {
+      .topbar { padding: 8px; }
+      .topbar .left { flex-wrap: wrap; gap: 6px; }
+      #top-sort, #top-years, #top-years-clear {
+        font-size: 10pt;
+        height: 32px;
+        line-height: 32px;
+        padding: 0 8px;
+        min-height: 44px; /* iOS recommended tap target */
+      }
+      #top-years { width: 9ch; }
+      #top-years-clear { min-width: 44px; }
+      .row { padding: 4px 0; }
+      .title, .sub { padding: 2px 0; }
+      a { padding: 4px 0; display: inline-block; }
+    }
     .hr { border-top: 1px solid #ddd; margin: 10px 0; }
-    .footer { text-align: center; margin: 14px 0 20px 0; color: #666; font-size: 8.5pt; }
+    .topbar { margin-bottom: 10px; }
+    .box { padding-top: 10px; }
+    .footer { text-align: center; margin: 30px 0 20px 0; padding-top: 14px; border-top: 2px solid #ff6600; color: #666; font-size: 8.5pt; }
     .footer .sep { color: #999; margin: 0 6px; }
   </style>
   <script src="jswasm/sqlite3.js"></script>
@@ -75,28 +140,31 @@
   <div id="hnmain">
     <div class="topbar">
       <div class="left">
-        <a class="name" href="index.html?view=news">Hacker Book</a>
+        <a class="name" href="index.html?view=news"><img src="cd.png" alt="" class="logo-icon">Hacker Book</a>
         <span>|</span>
         <a href="hn-related/index.html">hn-related</a>
         <span>|</span>
         <select id="top-sort">
-          <option value="comments">total comments</option>
-          <option value="points">total story points</option>
-          <option value="discussions">total discussions</option>
-          <option value="pure_recent">pure recency</option>
+          <option value="comments">most comments</option>
+          <option value="points">most story points</option>
+          <option value="discussions">most discussions</option>
+          <option value="pure_recent">most recent</option>
         </select>
-        <select id="top-years" size="1" multiple title="Filter by year (Cmd/Ctrl-click for multi-select)"></select>
-        <button id="top-years-apply" type="button">apply</button>
+        <span class="years-wrap"><select id="top-years" size="1" multiple title="Filter by year (Cmd/Ctrl-click for multi-select)"></select></span>
+        <button id="top-years-clear" type="button">clear</button>
       </div>
       <div class="right">
         <span id="snapshot" class="hint"></span>
+        <span id="loading-status"></span>
       </div>
     </div>
     <div id="content" class="box"></div>
     <div class="footer">
       <span id="footer-meta" class="hint">Related clusters: 0.</span>
       <span class="sep">|</span>
-      <span id="status" class="hint">Loading related index...</span>
+      <a href="https://github.com/crisdosyago">Made by Cris</a>
+      <span class="sep">|</span>
+      <a href="https://news.ycombinator.com">Visit HN</a>
     </div>
   </div>
 
@@ -109,13 +177,13 @@
       shards: 'static-related-shards/'
     };
 
-    const statusEl = document.getElementById('status');
     const contentEl = document.getElementById('content');
     const footerMetaEl = document.getElementById('footer-meta');
     const snapshotEl = document.getElementById('snapshot');
+    const loadingStatusEl = document.getElementById('loading-status');
     const topSortEl = document.getElementById('top-sort');
     const topYearsEl = document.getElementById('top-years');
-    const topYearsApplyEl = document.getElementById('top-years-apply');
+    const topYearsClearEl = document.getElementById('top-years-clear');
 
     let sqlite3 = null;
     let manifest = null;
@@ -172,9 +240,11 @@
         return dayStr;
       }
     }
-    function storyUrl(id) { return `index.html?view=item&id=${encodeURIComponent(id)}`; }
+    const HACKERBOOK_BASE = 'https://hackerbook.dosaygo.com';
+    function storyUrl(id) { return `${HACKERBOOK_BASE}/index.html?view=item&id=${encodeURIComponent(id)}`; }
     function hnDiscussionUrl(id) { return `https://news.ycombinator.com/item?id=${encodeURIComponent(id)}`; }
-    function userUrl(by) { return `index.html?view=user&id=${encodeURIComponent(by)}`; }
+    function hnFromUrl(host) { return `https://hn.algolia.com/?dateRange=all&page=0&prefix=false&query=${encodeURIComponent(host)}&sort=byDate&type=story`; }
+    function userUrl(by) { return `${HACKERBOOK_BASE}/index.html?view=user&id=${encodeURIComponent(by)}`; }
     function hostFromUrl(url) {
       if (!url) return '';
       try { return new URL(url).host.replace(/^www\./i, ''); } catch { return ''; }
@@ -182,7 +252,7 @@
     function siteTailHtml(url) {
       const host = hostFromUrl(url);
       if (!host) return '';
-      return ` <span class="sitebit comhead">(<span class="sitestr">${esc(host)}</span>)</span>`;
+      return ` <span class="sitebit comhead">(<a href="${hnFromUrl(host)}" target="_blank" rel="noopener"><span class="sitestr">${esc(host)}</span></a>)</span>`;
     }
     function normalizeSort(v) {
       const s = String(v || 'comments').toLowerCase();
@@ -248,8 +318,10 @@
       if (open) {
         const n = Math.max(4, Math.min(14, topYearsEl.options.length || 4));
         topYearsEl.size = n;
+        topYearsEl.classList.add('expanded');
       } else {
         topYearsEl.size = 1;
+        topYearsEl.classList.remove('expanded');
       }
     }
     function applyYearFilter(rows, yearSet) {
@@ -377,7 +449,7 @@
       return `<div class="pager">${prev} | page ${page} | ${next}</div>`;
     }
 
-    function renderTopList(page, sortKey, yearSet) {
+    async function renderTopList(page, sortKey, yearSet) {
       const sort = normalizeSort(sortKey);
       const rows = applyYearFilter(sortTopRows(topIndex.rows || [], sort), yearSet);
       const total = rows.length;
@@ -387,23 +459,93 @@
       const hasNext = offset + PAGE_SIZE < total;
       const yearsParam = yearsParamFromSet(yearSet);
 
-      let html = `<div class="hr"></div>`;
+      // If year filter active, load best representative from each cluster for those years.
+      let yearReps = new Map(); // component_id -> { title, by, time, score, url, story_id, memberCount }
+      if (yearSet.size > 0 && pageRows.length > 0) {
+        void 0 // statusEl.textContent = `Loading year-filtered representatives...`;
+        const yearsArr = [...yearSet];
+        const yearPlaceholders = yearsArr.map(() => '?').join(',');
+
+        // Group by shard.
+        const cidsByShard = new Map();
+        for (const r of pageRows) {
+          const shardRec = shardRecForRank(r.rank);
+          if (!shardRec) continue;
+          if (!cidsByShard.has(shardRec.sid)) cidsByShard.set(shardRec.sid, []);
+          cidsByShard.get(shardRec.sid).push(r.component_id);
+        }
+
+        const shardIds = [...cidsByShard.keys()];
+        let loadedShards = 0;
+        for (const [sid, cids] of cidsByShard.entries()) {
+          try {
+            if (loadingStatusEl) loadingStatusEl.textContent = `shard ${++loadedShards}/${shardIds.length}`;
+            const db = await loadShardBySid(sid);
+            for (const cid of cids) {
+              // Find best story from selected years (highest score, most recent).
+              const yearMembers = sqlAll(db, `
+                SELECT story_id, title, by, time, score, url
+                FROM component_members
+                WHERE component_id = ?
+                  AND CAST(strftime('%Y', COALESCE(time, 0), 'unixepoch') AS INTEGER) IN (${yearPlaceholders})
+                ORDER BY COALESCE(score, 0) DESC, COALESCE(time, 0) DESC
+                LIMIT 1
+              `, [cid, ...yearsArr]);
+              if (yearMembers.length > 0) {
+                const m = yearMembers[0];
+                // Also count members in those years.
+                const countRow = sqlOne(db, `
+                  SELECT COUNT(*) as cnt
+                  FROM component_members
+                  WHERE component_id = ?
+                    AND CAST(strftime('%Y', COALESCE(time, 0), 'unixepoch') AS INTEGER) IN (${yearPlaceholders})
+                `, [cid, ...yearsArr]);
+                yearReps.set(cid, {
+                  story_id: m.story_id,
+                  title: m.title,
+                  by: m.by,
+                  time: m.time,
+                  score: m.score,
+                  url: m.url,
+                  memberCount: countRow?.cnt || 1
+                });
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed to load year reps from shard ${sid}:`, err);
+          }
+        }
+        if (loadingStatusEl) loadingStatusEl.textContent = '';
+      }
+
+      let html = ``;
       for (let i = 0; i < pageRows.length; i += 1) {
         const r = pageRows[i];
         const rank = offset + i + 1;
         const clusterParams = new URLSearchParams({ cid: String(r.component_id), sort });
         if (yearsParam) clusterParams.set('years', yearsParam);
         const clusterHref = `?${clusterParams.toString()}`;
-        const clusterPoints = Math.round(Number(r.story_points_sum != null ? r.story_points_sum : (r.score || 0)));
-        const siteTail = siteTailHtml(r.root_url);
+
+        // Use year-filtered representative if available.
+        const rep = yearReps.get(r.component_id);
+        const displayTitle = rep ? rep.title : r.title;
+        const displayBy = rep ? rep.by : r.by;
+        const displayTime = rep ? rep.time : r.time;
+        const displayScore = rep ? rep.score : r.score;
+        const displayUrl = rep ? rep.url : r.root_url;
+        const displayStoryId = rep ? rep.story_id : r.root_story_id;
+        const displayMemberCount = rep ? rep.memberCount : r.member_count;
+
+        const clusterPoints = Math.round(Number(r.story_points_sum != null ? r.story_points_sum : (displayScore || 0)));
+        const siteTail = siteTailHtml(displayUrl);
         html += `
           <div class="row">
-            <div class="title"><span class="ranknum">${rank}.</span> <span class="titleline"><a href="${storyUrl(r.root_story_id)}">${esc(r.title || '[untitled]')}</a>${siteTail}</span></div>
+            <div class="title"><span class="ranknum">${rank}.</span> <span class="titleline"><a href="${clusterHref}">${esc(displayTitle || '[untitled]')}</a>${siteTail}</span></div>
             <div class="sub">
-              by ${r.by ? `<a href="${userUrl(r.by)}">${esc(r.by)}</a>` : '[unknown]'}
+              by ${displayBy ? `<a href="${userUrl(displayBy)}">${esc(displayBy)}</a>` : '[unknown]'}
               | ${fmtNum(clusterPoints)} points
-              | ${fmtTime(r.time)}
-              | <a href="${clusterHref}">${fmtNum(r.member_count)} discussions (${fmtNum(r.comment_count)} comments)</a>
+              | ${fmtTime(displayTime)}
+              | <a class="sublink" href="${clusterHref}">${fmtNum(displayMemberCount)} discussions (${fmtNum(r.comment_count)} comments)</a>
             </div>
           </div>
         `;
@@ -415,7 +557,7 @@
         for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
       }
       if (footerMetaEl) footerMetaEl.textContent = `Related clusters: ${fmtNum(total)}.`;
-      statusEl.textContent = `Loaded ${fmtNum(pageRows.length)} rows (page ${page}).`;
+      void 0 // statusEl.textContent = `Loaded ${fmtNum(pageRows.length)} rows (page ${page}).`;
     }
 
     async function renderCluster(componentId, page, sortKey = 'comments', yearSet = new Set()) {
@@ -425,18 +567,20 @@
       const rootRow = (topIndex.rows || []).find((r) => Number(r.component_id) === cid);
       if (!rootRow) {
         contentEl.innerHTML = `<div class="row">Cluster not found: <span class="mono">${esc(componentId)}</span></div>`;
-        statusEl.textContent = 'Cluster not found.';
+        void 0 // statusEl.textContent = 'Cluster not found.';
         return;
       }
       const shardRec = shardRecForRank(rootRow.rank);
       if (!shardRec) {
         contentEl.innerHTML = `<div class="row">No shard found for cluster rank ${esc(rootRow.rank)}.</div>`;
-        statusEl.textContent = 'Missing shard.';
+        void 0 // statusEl.textContent = 'Missing shard.';
         return;
       }
 
-      statusEl.textContent = `Loading cluster ${cid} from shard ${shardRec.sid}...`;
+      void 0 // statusEl.textContent = `Loading cluster ${cid} from shard ${shardRec.sid}...`;
+      if (loadingStatusEl) loadingStatusEl.textContent = `shard ${shardRec.sid}`;
       const db = await loadShardBySid(shardRec.sid);
+      if (loadingStatusEl) loadingStatusEl.textContent = '';
 
       let comp = null;
       try {
@@ -462,30 +606,40 @@
       }
       if (!comp) {
         contentEl.innerHTML = `<div class="row">Cluster ${esc(componentId)} not present in shard ${esc(shardRec.sid)}.</div>`;
-        statusEl.textContent = 'Cluster missing in shard.';
+        void 0 // statusEl.textContent = 'Cluster missing in shard.';
         return;
       }
 
-      const total = Number(comp.member_count || 0);
-      const offset = (page - 1) * PAGE_SIZE;
-      let members = [];
+      // Load all members, then filter by year if needed.
+      let allMembers = [];
       try {
-        members = sqlAll(db, `
+        allMembers = sqlAll(db, `
           SELECT story_id, rel_score, title, by, time, score, url
           FROM component_members
           WHERE component_id=?
           ORDER BY date(COALESCE(time,0), 'unixepoch') DESC, COALESCE(score,0) DESC, COALESCE(time,0) DESC, story_id DESC
-          LIMIT ? OFFSET ?
-        `, [cid, PAGE_SIZE, offset]);
+        `, [cid]);
       } catch {
-        members = sqlAll(db, `
+        allMembers = sqlAll(db, `
           SELECT story_id, rel_score, title, by, time, score
           FROM component_members
           WHERE component_id=?
           ORDER BY date(COALESCE(time,0), 'unixepoch') DESC, COALESCE(score,0) DESC, COALESCE(time,0) DESC, story_id DESC
-          LIMIT ? OFFSET ?
-        `, [cid, PAGE_SIZE, offset]).map((r) => ({ ...r, url: null }));
+        `, [cid]).map((r) => ({ ...r, url: null }));
       }
+
+      // Filter by year if selected.
+      let filteredMembers = allMembers;
+      if (yearSet.size > 0) {
+        filteredMembers = allMembers.filter((m) => {
+          const y = yearFromTs(m.time);
+          return y != null && yearSet.has(y);
+        });
+      }
+
+      const total = filteredMembers.length;
+      const offset = (page - 1) * PAGE_SIZE;
+      const members = filteredMembers.slice(offset, offset + PAGE_SIZE);
       const hasPrev = page > 1;
       const hasNext = offset + PAGE_SIZE < total;
       const backQs = new URLSearchParams({ sort });
@@ -505,11 +659,13 @@
             | ${fmtTime(comp.root_time)}
           </div>
           <div class="sub">
-            members: ${fmtNum(comp.member_count)} discussions (${fmtNum(comp.comment_count)} comments) | links: ${fmtNum(comp.edge_count)}
+            ${yearSet.size > 0
+              ? `showing: ${fmtNum(total)} of ${fmtNum(comp.member_count)} discussions (filtered by ${[...yearSet].sort((a,b)=>b-a).join(', ')})`
+              : `members: ${fmtNum(comp.member_count)} discussions (${fmtNum(comp.comment_count)} comments) | links: ${fmtNum(comp.edge_count)}`}
           </div>
         </div>
         <div class="hr"></div>
-        <div class="hint">Timeline order: newest day first; within each day highest points first.</div>
+        <div class="hint">Timeline order: newest day first; within each day highest points first.${yearSet.size > 0 ? ' Year filter active.' : ''}</div>
         <div class="timeline">
       `;
       let openDay = null;
@@ -548,7 +704,7 @@
         for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
       }
       if (footerMetaEl) footerMetaEl.textContent = `Related clusters: ${fmtNum(applyYearFilter(topIndex.rows || [], yearSet).length)}.`;
-      statusEl.textContent = `Loaded cluster ${cid}, showing ${members.length}/${fmtNum(total)} members.`;
+      void 0 // statusEl.textContent = `Loaded cluster ${cid}, showing ${members.length}/${fmtNum(total)} members.`;
     }
 
     async function init() {
@@ -582,6 +738,7 @@
           });
         }
         if (topYearsEl) {
+          let initialYearsParam = yearsParamFromSet(yearSet);
           topYearsEl.addEventListener('mousedown', (e) => {
             if (topYearsEl.size <= 1) {
               e.preventDefault();
@@ -590,7 +747,18 @@
             }
           });
           topYearsEl.addEventListener('focus', () => setYearsMenuOpen(true));
-          topYearsEl.addEventListener('blur', () => setYearsMenuOpen(false));
+          topYearsEl.addEventListener('blur', () => {
+            setYearsMenuOpen(false);
+            // Auto-apply on blur if selection changed.
+            const newYears = yearsParamFromSet(selectedYearsFromControl());
+            if (newYears !== initialYearsParam) {
+              const q = new URLSearchParams(location.search);
+              if (newYears) q.set('years', newYears); else q.delete('years');
+              q.set('p', '1');
+              q.delete('cid');
+              location.search = q.toString();
+            }
+          });
           topYearsEl.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
               setYearsMenuOpen(false);
@@ -598,11 +766,14 @@
             }
           });
         }
-        if (topYearsApplyEl) {
-          topYearsApplyEl.addEventListener('click', () => {
-            const years = yearsParamFromSet(selectedYearsFromControl());
+        if (topYearsClearEl) {
+          topYearsClearEl.addEventListener('click', () => {
+            // Clear all year selections.
+            if (topYearsEl) {
+              for (const opt of topYearsEl.options) opt.selected = false;
+            }
             const q = new URLSearchParams(location.search);
-            if (years) q.set('years', years); else q.delete('years');
+            q.delete('years');
             q.set('p', '1');
             q.delete('cid');
             location.search = q.toString();
@@ -612,10 +783,10 @@
         if (cid) {
           await renderCluster(cid, page, sort, yearSet);
         } else {
-          renderTopList(page, sort, yearSet);
+          await renderTopList(page, sort, yearSet);
         }
       } catch (err) {
-        statusEl.textContent = 'Failed to load related view.';
+        void 0 // statusEl.textContent = 'Failed to load related view.';
         contentEl.innerHTML = `<div class="row mono">${esc(err && err.message ? err.message : String(err))}</div>`;
       }
     }

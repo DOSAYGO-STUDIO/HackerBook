@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "created_at": "2026-02-05T14:37:13.398Z",
+  "created_at": "2026-02-05T15:13:38.541Z",
   "source_staging": "data/static-staging-hn.sqlite",
   "snapshot_time": 1770101396,
   "config": {
@@ -23,110 +23,110 @@
       "rank_lo": 1,
       "rank_hi": 3500,
       "component_count": 3500,
-      "member_count": 15573,
-      "link_count": 15575,
-      "file": "related_0_9a2cce239957.sqlite.gz",
-      "bytes": 2193802
+      "member_count": 15264,
+      "link_count": 15031,
+      "file": "related_0_82551ed1cfcf.sqlite.gz",
+      "bytes": 2214858
     },
     {
       "sid": 1,
       "rank_lo": 3501,
       "rank_hi": 7000,
       "component_count": 3500,
-      "member_count": 10668,
-      "link_count": 8220,
-      "file": "related_1_cd91cbd75d04.sqlite.gz",
-      "bytes": 1644772
+      "member_count": 10894,
+      "link_count": 8576,
+      "file": "related_1_4b992cd30fb8.sqlite.gz",
+      "bytes": 1698522
     },
     {
       "sid": 2,
       "rank_lo": 7001,
       "rank_hi": 10500,
       "component_count": 3500,
-      "member_count": 9837,
-      "link_count": 7036,
-      "file": "related_2_687f23675ca6.sqlite.gz",
-      "bytes": 1548685
+      "member_count": 9757,
+      "link_count": 6985,
+      "file": "related_2_ef30a757017d.sqlite.gz",
+      "bytes": 1551714
     },
     {
       "sid": 3,
       "rank_lo": 10501,
       "rank_hi": 14000,
       "component_count": 3500,
-      "member_count": 9101,
-      "link_count": 6086,
-      "file": "related_3_5bacef7fe4ce.sqlite.gz",
-      "bytes": 1461025
+      "member_count": 9340,
+      "link_count": 6393,
+      "file": "related_3_ea31167bfa46.sqlite.gz",
+      "bytes": 1509486
     },
     {
       "sid": 4,
       "rank_lo": 14001,
       "rank_hi": 17500,
       "component_count": 3500,
-      "member_count": 8907,
-      "link_count": 5751,
-      "file": "related_4_0fab0461cb90.sqlite.gz",
-      "bytes": 1442551
+      "member_count": 8809,
+      "link_count": 5629,
+      "file": "related_4_4062aa5310ff.sqlite.gz",
+      "bytes": 1437392
     },
     {
       "sid": 5,
       "rank_lo": 17501,
       "rank_hi": 21000,
       "component_count": 3500,
-      "member_count": 8423,
-      "link_count": 5202,
-      "file": "related_5_c31ba38de960.sqlite.gz",
-      "bytes": 1400781
+      "member_count": 8533,
+      "link_count": 5323,
+      "file": "related_5_c061c8b260ed.sqlite.gz",
+      "bytes": 1404527
     },
     {
       "sid": 6,
       "rank_lo": 21001,
       "rank_hi": 24500,
       "component_count": 3500,
-      "member_count": 8336,
-      "link_count": 5053,
-      "file": "related_6_d0bf44a87a2e.sqlite.gz",
-      "bytes": 1385123
+      "member_count": 8249,
+      "link_count": 4958,
+      "file": "related_6_752649d48eae.sqlite.gz",
+      "bytes": 1367005
     },
     {
       "sid": 7,
       "rank_lo": 24501,
       "rank_hi": 28000,
       "component_count": 3500,
-      "member_count": 8243,
-      "link_count": 4968,
-      "file": "related_7_6d3d623a2144.sqlite.gz",
-      "bytes": 1374934
+      "member_count": 8112,
+      "link_count": 4859,
+      "file": "related_7_13d02c56c383.sqlite.gz",
+      "bytes": 1347682
     },
     {
       "sid": 8,
       "rank_lo": 28001,
       "rank_hi": 31500,
       "component_count": 3500,
-      "member_count": 8115,
-      "link_count": 4969,
-      "file": "related_8_f30c55778e70.sqlite.gz",
-      "bytes": 1369001
+      "member_count": 8151,
+      "link_count": 4995,
+      "file": "related_8_36d7248cdbca.sqlite.gz",
+      "bytes": 1354466
     },
     {
       "sid": 9,
       "rank_lo": 31501,
       "rank_hi": 35000,
       "component_count": 3500,
-      "member_count": 7962,
-      "link_count": 4708,
-      "file": "related_9_6cff42a67a58.sqlite.gz",
-      "bytes": 1295745
+      "member_count": 7990,
+      "link_count": 4760,
+      "file": "related_9_fcc63271eef9.sqlite.gz",
+      "bytes": 1312001
     },
     {
       "sid": 10,
       "rank_lo": 35001,
       "rank_hi": 36559,
       "component_count": 1559,
-      "member_count": 3230,
-      "link_count": 1721,
-      "file": "related_10_0cfb5d1742ff.sqlite.gz",
-      "bytes": 519873
+      "member_count": 3296,
+      "link_count": 1780,
+      "file": "related_10_30bbf51e3dc5.sqlite.gz",
+      "bytes": 537879
     }
   ]
 }

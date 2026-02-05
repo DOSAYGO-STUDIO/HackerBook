@@ -4,7 +4,7 @@ const { readFile, stat } = require('fs/promises');
 const { join, extname } = require('path');
 
 const PORT = process.env.PORT || 3000;
-const DOCS_DIR = join(__dirname, 'docs');
+const DOCS_DIR = join(__dirname, process.env.DOCS_DIR || 'docs');
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -23,11 +23,11 @@ const MIME_TYPES = {
 
 const server = createServer(async (req, res) => {
   try {
-    let filePath = join(DOCS_DIR, req.url === '/' ? 'index.html' : req.url);
-    
-    // Remove query strings
-    const [pathOnly] = filePath.split('?');
-    filePath = pathOnly;
+    // Remove query strings first
+    const [urlPath] = req.url.split('?');
+    // Default to index.html for root
+    const reqPath = urlPath === '/' ? 'index.html' : urlPath;
+    let filePath = join(DOCS_DIR, reqPath);
 
     const stats = await stat(filePath);
     
@@ -83,7 +83,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\nServing docs/ on http://localhost:${PORT}`);
+  console.log(`\nServing ${process.env.DOCS_DIR || 'docs'}/ on http://localhost:${PORT}`);
   console.log('HTML files: no-cache');
   console.log('Static assets (.sqlite, .gz, .bin): immutable, max-age=1yr');
   console.log('Other files: max-age=1hr\n');

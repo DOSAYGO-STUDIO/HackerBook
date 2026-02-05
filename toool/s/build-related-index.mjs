@@ -29,7 +29,7 @@ import Database from "better-sqlite3";
 
 const SPINNER_FRAMES = ["|", "/", "-", "\\"];
 const PROGRESS_INTERVAL_MS = 100;
-const RELATED_WORK_SCHEMA_VERSION = "v6_total_story_comments_cluster_years";
+const RELATED_WORK_SCHEMA_VERSION = "v8_full_comment_totals_resumable";
 const RANK_MODELS = Object.freeze({
   points: "v2_cluster_points_sum_comment_2_718_ceil",
   legacy: "v1_legacy_mixed"
@@ -751,12 +751,6 @@ async function phaseBuildStoryProfiles(ctx) {
   }
 
   progress.phase(PHASE_NUM, PHASE_TOTAL, "Preparing story profiles");
-  const stagingCols = tableColumns(stagingDb, "items_raw");
-  if (!stagingCols.has("descendants")) {
-    throw new Error(
-      "staging items_raw is missing descendants; rebuild staging DB from raw (delete data/static-staging-hn.sqlite or run with --reset)"
-    );
-  }
   workDb.exec(`
     INSERT OR IGNORE INTO story_profiles(story_id, token_json, token_count, title, by, time, score)
     SELECT DISTINCT story_id, '[]', -1, NULL, NULL, NULL, NULL
@@ -801,7 +795,7 @@ async function phaseBuildStoryProfiles(ctx) {
 
     const placeholders = ids.map(() => "?").join(",");
     const srcRows = stagingDb.prepare(`
-      SELECT id, title, text, by, time, score, url, descendants
+      SELECT id, title, text, by, time, score, url
       FROM items_raw
       WHERE id IN (${placeholders})
     `).all(...ids);
@@ -817,7 +811,7 @@ async function phaseBuildStoryProfiles(ctx) {
       const time = row?.time == null ? null : Number(row.time);
       const score = row?.score == null ? null : Number(row.score);
       const url = row?.url || null;
-      const comment_total = row?.descendants == null ? 0 : Number(row.descendants);
+      const comment_total = -1; // Will be backfilled from parent counts
       const tokens = tokenizeStory(row?.title || "", row?.text || "", args.maxStoryTokens);
       updates.push({
         story_id: sid,
@@ -931,70 +925,229 @@ async function backfillStoryProfileUrls(ctx) {
 async function backfillStoryCommentTotals(ctx) {
   const { stagingDb, workDb, args, progress } = ctx;
   if (!stagingDb) return;
-  const cols = tableColumns(stagingDb, "items_raw");
-  if (!cols.has("descendants")) {
-    progress.done("Backfill story comment totals skipped | staging.items_raw.descendants missing");
+
+  const doneKey = "phase_comment_totals_done";
+  if (getMetaBool(workDb, doneKey)) {
+    progress.done("Phase 3b/6: comment totals already complete");
     return;
   }
-  const missingBefore = Number(
-    workDb.prepare("SELECT COUNT(*) AS c FROM story_profiles WHERE comment_total < 0").get()?.c || 0
-  );
-  if (!missingBefore) return;
 
-  const selectMissing = workDb.prepare(`
-    SELECT story_id
-    FROM story_profiles
-    WHERE comment_total < 0 AND story_id > ?
-    ORDER BY story_id ASC
+  // Get total items in staging for progress.
+  const totalItemsRow = stagingDb.prepare("SELECT MAX(id) AS max_id FROM items_raw").get();
+  const maxItemId = Number(totalItemsRow?.max_id || 0);
+  if (maxItemId === 0) {
+    progress.done("Phase 3b/6: no items in staging");
+    return;
+  }
+
+  // Load story IDs we care about into a Set for fast lookup.
+  progress.phase(3, 6, "Loading story IDs from profiles");
+  const storyIdsRows = workDb.prepare("SELECT story_id FROM story_profiles").all();
+  const storyIdSet = new Set(storyIdsRows.map((r) => Number(r.story_id)));
+  const storyCount = storyIdSet.size;
+  if (storyCount === 0) {
+    progress.done("Phase 3b/6: no stories in profiles");
+    return;
+  }
+  progress.done(`Phase 3b/6: loaded ${fmtNum(storyCount)} story IDs to track`);
+
+  // Ensure parent index exists for efficient parent chain traversal.
+  progress.phase(3, 6, "Ensuring parent index on staging DB");
+  try {
+    stagingDb.exec("CREATE INDEX IF NOT EXISTS idx_items_raw_parent ON items_raw(parent)");
+  } catch (err) {
+    progress.done(`Phase 3b/6: failed to create parent index: ${err.message}`);
+    return;
+  }
+
+  // Resume state.
+  let lastItemId = Number(getMeta(workDb, "comment_scan_last_id", "0")) || 0;
+  let scannedItems = Number(getMeta(workDb, "comment_scan_count", "0")) || 0;
+
+  // Accumulator: story_id -> comment count.
+  // Try to resume from saved counts.
+  const commentCounts = new Map();
+  const savedCountsJson = getMeta(workDb, "comment_scan_counts_json", "");
+  if (savedCountsJson) {
+    try {
+      const saved = JSON.parse(savedCountsJson);
+      for (const [k, v] of Object.entries(saved)) {
+        commentCounts.set(Number(k), Number(v));
+      }
+      progress.done(`Phase 3b/6: resumed with ${fmtNum(commentCounts.size)} partial counts`);
+    } catch {
+      // Ignore parse errors, start fresh.
+    }
+  }
+
+  // LRU cache for parent chain resolution: item_id -> root_story_id (or null).
+  const resolutionCache = new Map();
+  const CACHE_LIMIT = 500000;
+
+  // Resolve an item to its root story (if it's under a story we care about).
+  const selectParent = stagingDb.prepare("SELECT parent, type FROM items_raw WHERE id = ? LIMIT 1");
+  function resolveToStory(itemId, maxDepth = 50) {
+    if (resolutionCache.has(itemId)) return resolutionCache.get(itemId);
+    if (storyIdSet.has(itemId)) {
+      resolutionCache.set(itemId, itemId);
+      return itemId;
+    }
+
+    const chain = [itemId];
+    let current = itemId;
+    let depth = 0;
+
+    while (depth < maxDepth) {
+      const row = selectParent.get(current);
+      if (!row || row.parent == null || row.parent === 0) {
+        // Reached a root that's not in our set.
+        for (const id of chain) resolutionCache.set(id, null);
+        return null;
+      }
+      const parentId = Number(row.parent);
+      if (resolutionCache.has(parentId)) {
+        const resolved = resolutionCache.get(parentId);
+        for (const id of chain) resolutionCache.set(id, resolved);
+        return resolved;
+      }
+      if (storyIdSet.has(parentId)) {
+        for (const id of chain) resolutionCache.set(id, parentId);
+        resolutionCache.set(parentId, parentId);
+        return parentId;
+      }
+      chain.push(parentId);
+      current = parentId;
+      depth += 1;
+    }
+
+    // Max depth exceeded.
+    for (const id of chain) resolutionCache.set(id, null);
+    return null;
+  }
+
+  // Batch scan staging items.
+  const batchSize = 50000;
+  const selectItems = stagingDb.prepare(`
+    SELECT id, parent, type
+    FROM items_raw
+    WHERE id > ? AND type = 'comment'
+    ORDER BY id ASC
     LIMIT ?
   `);
-  const updateCommentTotal = workDb.prepare(`
-    UPDATE story_profiles
-    SET comment_total=?
-    WHERE story_id=?
-  `);
-  const updateBatch = workDb.transaction((rows) => {
-    for (const r of rows) updateCommentTotal.run(r.comment_total, r.story_id);
-  });
 
-  const batchSize = Math.max(500, Math.min(5000, Number(args.resolveBatch || 500)));
-  let lastStoryId = 0;
-  let processed = 0;
-  let filled = 0;
   const startTs = Date.now();
-  while (true) {
-    const ids = selectMissing.all(lastStoryId, batchSize).map((r) => Number(r.story_id));
-    if (!ids.length) break;
-    lastStoryId = Number(ids[ids.length - 1]) || lastStoryId;
-    const placeholders = ids.map(() => "?").join(",");
-    const srcRows = stagingDb.prepare(`
-      SELECT id, descendants
-      FROM items_raw
-      WHERE id IN (${placeholders})
-    `).all(...ids);
-    const byId = new Map(srcRows.map((r) => [Number(r.id), r]));
-    const updates = ids.map((sid) => ({
-      story_id: sid,
-      comment_total: byId.get(sid)?.descendants == null ? 0 : Number(byId.get(sid).descendants)
-    }));
-    updateBatch(updates);
-    processed += ids.length;
-    filled += updates.length;
+  const saveInterval = 500000; // Save progress every 500k items.
+  let lastSaveAt = scannedItems;
+
+  progress.phase(3, 6, `Scanning items for comment counts (resuming from id=${fmtNum(lastItemId)})`);
+
+  while (lastItemId < maxItemId) {
+    const rows = selectItems.all(lastItemId, batchSize);
+    if (!rows.length) {
+      // No more comments, but might be gaps. Advance lastItemId.
+      lastItemId = Math.min(lastItemId + batchSize, maxItemId);
+      setMeta(workDb, "comment_scan_last_id", lastItemId);
+      continue;
+    }
+
+    for (const row of rows) {
+      const itemId = Number(row.id);
+      lastItemId = itemId;
+      scannedItems += 1;
+
+      // Resolve this comment to its root story.
+      const storyId = resolveToStory(itemId);
+      if (storyId != null) {
+        commentCounts.set(storyId, (commentCounts.get(storyId) || 0) + 1);
+      }
+
+      // Evict old cache entries if too large.
+      if (resolutionCache.size > CACHE_LIMIT) {
+        const toDelete = resolutionCache.size - CACHE_LIMIT + 50000;
+        const iter = resolutionCache.keys();
+        for (let i = 0; i < toDelete; i++) {
+          const key = iter.next().value;
+          if (key != null) resolutionCache.delete(key);
+        }
+      }
+    }
+
+    // Save progress periodically.
+    if (scannedItems - lastSaveAt >= saveInterval) {
+      setMeta(workDb, "comment_scan_last_id", lastItemId);
+      setMeta(workDb, "comment_scan_count", scannedItems);
+      // Save counts as JSON (compact).
+      const countsObj = Object.fromEntries(commentCounts);
+      setMeta(workDb, "comment_scan_counts_json", JSON.stringify(countsObj));
+      lastSaveAt = scannedItems;
+    }
+
+    const elapsedSec = Math.max(0.001, (Date.now() - startTs) / 1000);
+    const rate = scannedItems / elapsedSec;
+    const remaining = maxItemId - lastItemId;
+    const etaSec = rate > 0 ? Math.round(remaining / rate) : 0;
+    const etaStr = etaSec > 3600
+      ? `${Math.floor(etaSec / 3600)}h${Math.floor((etaSec % 3600) / 60)}m`
+      : etaSec > 60
+        ? `${Math.floor(etaSec / 60)}m${etaSec % 60}s`
+        : `${etaSec}s`;
+
     progress.updateCounts(
       3,
       6,
-      "Backfilling story comment totals",
-      processed,
-      missingBefore,
-      `filled=${fmtNum(filled)}`,
+      "Scanning comments for story totals",
+      lastItemId,
+      maxItemId,
+      `scanned=${fmtNum(scannedItems)} | stories=${fmtNum(commentCounts.size)} | cache=${fmtNum(resolutionCache.size)} | ETA ${etaStr}`,
       startTs
+    );
+
+    await tick();
+  }
+
+  // Final save of counts.
+  setMeta(workDb, "comment_scan_last_id", maxItemId);
+  setMeta(workDb, "comment_scan_count", scannedItems);
+  const countsObj = Object.fromEntries(commentCounts);
+  setMeta(workDb, "comment_scan_counts_json", JSON.stringify(countsObj));
+
+  progress.done(`Phase 3b/6: scan complete | scanned=${fmtNum(scannedItems)} | stories with comments=${fmtNum(commentCounts.size)}`);
+
+  // Now update story_profiles with the counts.
+  progress.phase(3, 6, "Updating story profiles with comment totals");
+  const updateCommentTotal = workDb.prepare(`
+    UPDATE story_profiles SET comment_total = ? WHERE story_id = ?
+  `);
+  const updateBatch = workDb.transaction((rows) => {
+    for (const r of rows) updateCommentTotal.run(r.count, r.story_id);
+  });
+
+  const entries = [...commentCounts.entries()];
+  const updateBatchSize = 5000;
+  let updated = 0;
+  const updateStartTs = Date.now();
+
+  for (let i = 0; i < entries.length; i += updateBatchSize) {
+    const batch = entries.slice(i, i + updateBatchSize).map(([story_id, count]) => ({ story_id, count }));
+    updateBatch(batch);
+    updated += batch.length;
+    progress.updateCounts(
+      3,
+      6,
+      "Updating story profiles with comment totals",
+      updated,
+      entries.length,
+      "",
+      updateStartTs
     );
     await tick();
   }
-  const missingAfter = Number(
-    workDb.prepare("SELECT COUNT(*) AS c FROM story_profiles WHERE comment_total < 0").get()?.c || 0
-  );
-  progress.done(`Backfill story comment totals complete | remaining missing=${fmtNum(missingAfter)}`);
+
+  // Set stories with no comments to 0.
+  workDb.exec("UPDATE story_profiles SET comment_total = 0 WHERE comment_total < 0");
+
+  markPhaseDone(workDb, doneKey);
+  progress.done(`Phase 3b/6: complete | updated ${fmtNum(updated)} stories with comment totals`);
 }
 
 function createTokenCache(workDb, limit = 20000) {
@@ -2051,17 +2204,6 @@ async function main() {
       `).get();
       if (!Number(hasItemsRaw?.c)) {
         throw new Error(`Table items_raw not found in ${fromStaging}`);
-      }
-      const cols = tableColumns(stagingDb, "items_raw");
-      if (!cols.has("descendants")) {
-        try {
-          stagingDb.close();
-        } catch {}
-        stagingDb = null;
-        progress.done("Staging DB missing descendants; rebuilding from raw exports");
-        await buildStagingFromRaw({ stagingPath: fromStaging, dataDir, progress });
-        progress.phase(0, 6, "Re-opening staging DB");
-        stagingDb = openDb(fromStaging, false);
       }
     }
 
