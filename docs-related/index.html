@@ -149,7 +149,10 @@
           <option value="comments">most comments</option>
           <option value="points">most story points</option>
           <option value="discussions">most discussions</option>
-          <option value="linked">most linked</option>
+          <option value="linked">most linked clusters</option>
+          <option value="raw_linked">most linked (raw stories)</option>
+          <option value="ranked">ranked</option>
+          <option value="custom_ranked">custom ranked...</option>
           <option value="pure_recent">most recent</option>
         </select>
         <span class="years-wrap"><select id="top-years" size="1" multiple title="Filter by year (Cmd/Ctrl-click for multi-select)"></select></span>
@@ -192,6 +195,15 @@
     let topIndex = null;
     const shardCache = new Map();
     const topSortCache = new Map();
+    const CUSTOM_RANK_STORAGE_KEY = 'hb_related_custom_rank_expr_v1';
+    const DEFAULT_CUSTOM_RANK_EXPR = '0.50*log1p(backlinks)+0.25*log1p(discussions)+0.15*log1p(comments)+0.10*log1p(points)';
+    const CUSTOM_RANK_ALLOWED_IDS = new Set([
+      'backlinks', 'discussions', 'comments', 'points', 'time', 'rank',
+      'ln', 'log', 'log1p', 'sqrt', 'pow', 'min', 'max', 'abs',
+      'round', 'floor', 'ceil', 'exp', 'PI', 'E'
+    ]);
+    let customRankExpr = '';
+    let customRankFn = null;
 
     function qs() { return new URLSearchParams(location.search); }
     function esc(s) {
@@ -258,8 +270,130 @@
     }
     function normalizeSort(v) {
       const s = String(v || 'comments').toLowerCase();
-      if (s === 'comments' || s === 'points' || s === 'discussions' || s === 'linked' || s === 'pure_recent') return s;
+      if (s === 'linked_clusters') return 'linked';
+      if (s === 'comments' || s === 'points' || s === 'discussions' || s === 'linked' || s === 'raw_linked' || s === 'ranked' || s === 'custom_ranked' || s === 'pure_recent') return s;
       return 'comments';
+    }
+    function rankedScore(row) {
+      const backlinks = Math.max(0, Number(row?.incoming_link_count || 0));
+      const discussions = Math.max(0, Number(row?.member_count || 0));
+      const comments = Math.max(0, Number(row?.comment_count || 0));
+      const points = Math.max(0, Number(row?.story_points_sum || 0));
+      return (
+        0.50 * Math.log1p(backlinks) +
+        0.25 * Math.log1p(discussions) +
+        0.15 * Math.log1p(comments) +
+        0.10 * Math.log1p(points)
+      );
+    }
+    function validateCustomRankExpression(rawExpr) {
+      const expr = String(rawExpr || '').trim();
+      if (!expr) throw new Error('Expression cannot be empty.');
+      if (expr.length > 400) throw new Error('Expression too long (max 400 chars).');
+      if (/[;"'`[\]{}\\]/.test(expr)) throw new Error('Quotes, brackets, braces, semicolons, and backslashes are not allowed.');
+      if (!/^[0-9+\-*/%().,?:<>=!&|\sA-Za-z_]+$/.test(expr)) throw new Error('Unsupported character in expression.');
+      if (/(^|[^!<>=])=($|[^=])/.test(expr)) throw new Error('Assignment is not allowed; use comparisons only.');
+      if (/\b[A-Za-z_]\w*\s*\./.test(expr)) throw new Error('Property access is not allowed.');
+      if (/\b(?:window|document|globalThis|global|process|Function|eval|import|fetch|XMLHttpRequest|localStorage|sessionStorage|constructor|prototype|__proto__|this|new|class|while|for|do|if|switch|try|catch|throw|await|async|return)\b/.test(expr)) {
+        throw new Error('Only pure math expressions are allowed.');
+      }
+      const ids = expr.match(/\b[A-Za-z_]\w*\b/g) || [];
+      for (const id of ids) {
+        if (!CUSTOM_RANK_ALLOWED_IDS.has(id)) {
+          throw new Error(`Unknown identifier: ${id}`);
+        }
+      }
+      return expr;
+    }
+    function compileCustomRankExpression(rawExpr) {
+      const expr = validateCustomRankExpression(rawExpr);
+      const fn = new Function('row', `
+        "use strict";
+        const backlinks = Math.max(0, Number(row?.incoming_link_count || 0));
+        const discussions = Math.max(0, Number(row?.member_count || 0));
+        const comments = Math.max(0, Number(row?.comment_count || 0));
+        const points = Math.max(0, Number(row?.story_points_sum || 0));
+        const time = Math.max(0, Number(row?.time || 0));
+        const rank = Math.max(0, Number(row?.rank || 0));
+        const ln = Math.log;
+        const log = Math.log;
+        const log1p = Math.log1p;
+        const sqrt = Math.sqrt;
+        const pow = Math.pow;
+        const min = Math.min;
+        const max = Math.max;
+        const abs = Math.abs;
+        const round = Math.round;
+        const floor = Math.floor;
+        const ceil = Math.ceil;
+        const exp = Math.exp;
+        const PI = Math.PI;
+        const E = Math.E;
+        const out = (${expr});
+        return Number.isFinite(out) ? Number(out) : -Infinity;
+      `);
+      const testOut = fn({ incoming_link_count: 10, member_count: 5, comment_count: 200, story_points_sum: 500, time: 1700000000, rank: 100 });
+      if (!Number.isFinite(testOut)) throw new Error('Expression result must be a finite number.');
+      return { expr, fn };
+    }
+    function applyCustomRankExpression(rawExpr, persist = true) {
+      const compiled = compileCustomRankExpression(rawExpr);
+      customRankExpr = compiled.expr;
+      customRankFn = compiled.fn;
+      topSortCache.delete('custom_ranked');
+      if (persist) {
+        try { localStorage.setItem(CUSTOM_RANK_STORAGE_KEY, customRankExpr); } catch {}
+      }
+      return true;
+    }
+    function loadSavedCustomRankExpression() {
+      let loaded = false;
+      try {
+        const saved = localStorage.getItem(CUSTOM_RANK_STORAGE_KEY);
+        if (saved && applyCustomRankExpression(saved, false)) loaded = true;
+      } catch (err) {
+        console.warn('Failed loading custom rank expression:', err);
+        try { localStorage.removeItem(CUSTOM_RANK_STORAGE_KEY); } catch {}
+      }
+      if (!loaded) {
+        try {
+          applyCustomRankExpression(DEFAULT_CUSTOM_RANK_EXPR, false);
+          loaded = true;
+        } catch (err) {
+          console.warn('Failed loading default custom rank expression:', err);
+        }
+      }
+      return loaded;
+    }
+    function promptForCustomRankExpression() {
+      const help = [
+        'Custom rank expression (JavaScript math expression).',
+        'Variables: backlinks, discussions, comments, points, time, rank',
+        'Functions: ln, log, log1p, sqrt, pow, min, max, abs, round, floor, ceil, exp',
+        'Constants: PI, E',
+        'Allowed operators: + - * / % () < <= > >= == != && || ? :',
+        '',
+        'Example:',
+        '0.50*log1p(backlinks)+0.25*log1p(discussions)+0.15*log1p(comments)+0.10*log1p(points)'
+      ].join('\n');
+      const seed = customRankExpr || DEFAULT_CUSTOM_RANK_EXPR;
+      const input = window.prompt(help, seed);
+      if (input == null) return false;
+      try {
+        return applyCustomRankExpression(input, true);
+      } catch (err) {
+        window.alert(`Invalid custom rank expression.\n\n${err && err.message ? err.message : String(err)}`);
+        return false;
+      }
+    }
+    function customRankScore(row) {
+      if (!customRankFn) return rankedScore(row);
+      try {
+        const out = customRankFn(row);
+        return Number.isFinite(out) ? out : -Infinity;
+      } catch {
+        return rankedScore(row);
+      }
     }
     function parseYearsParam(v) {
       const set = new Set();
@@ -290,11 +424,15 @@
       }
       return out;
     }
-    function buildYearOptions(rows, selectedYears) {
+    function buildYearOptions(rows, backlinksRows, selectedYears) {
       if (!topYearsEl) return;
       const years = new Set();
       for (const r of (rows || [])) {
         for (const y of yearsFromRow(r)) years.add(y);
+      }
+      for (const r of (backlinksRows || [])) {
+        const y = yearFromTs(r && r.time);
+        if (y != null) years.add(y);
       }
       const sorted = [...years].sort((a, b) => b - a);
       topYearsEl.innerHTML = '';
@@ -359,6 +497,36 @@
           (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
           (Number(b.time || 0) - Number(a.time || 0)) ||
           (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'linked') {
+        out.sort((a, b) =>
+          (Number(b.incoming_link_count || 0) - Number(a.incoming_link_count || 0)) ||
+          (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'ranked') {
+        out.sort((a, b) =>
+          (rankedScore(b) - rankedScore(a)) ||
+          (Number(b.incoming_link_count || 0) - Number(a.incoming_link_count || 0)) ||
+          (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'custom_ranked') {
+        const scores = new Map();
+        for (const r of out) scores.set(r, customRankScore(r));
+        out.sort((a, b) =>
+          ((scores.get(b) - scores.get(a)) || 0) ||
+          (Number(b.incoming_link_count || 0) - Number(a.incoming_link_count || 0)) ||
+          (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
           (Number(a.rank || 0) - Number(b.rank || 0))
         );
       } else if (sort === 'pure_recent') {
@@ -451,8 +619,15 @@
       return `<div class="pager">${prev} | page ${page} | ${next}</div>`;
     }
 
-    async function renderBacklinks(page) {
-      const backlinks = topIndex.backlinks || [];
+    async function renderBacklinks(page, yearSet = new Set()) {
+      const yearsParam = yearsParamFromSet(yearSet);
+      const rawBacklinks = topIndex.backlinks || [];
+      const backlinks = yearSet.size > 0
+        ? rawBacklinks.filter((r) => {
+            const y = yearFromTs(r && r.time);
+            return y != null && yearSet.has(y);
+          })
+        : rawBacklinks;
       const total = backlinks.length;
       const offset = (page - 1) * PAGE_SIZE;
       const pageRows = backlinks.slice(offset, offset + PAGE_SIZE);
@@ -477,19 +652,19 @@
           </div>
         `;
       }
-      html += renderPager({ sort: 'linked' }, page, hasPrev, hasNext);
+      html += renderPager(yearsParam ? { sort: 'raw_linked', years: yearsParam } : { sort: 'raw_linked' }, page, hasPrev, hasNext);
       contentEl.innerHTML = html;
-      if (topSortEl) topSortEl.value = 'linked';
+      if (topSortEl) topSortEl.value = 'raw_linked';
       if (topYearsEl) {
-        for (const opt of topYearsEl.options) opt.selected = false;
+        for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
       }
-      if (footerMetaEl) footerMetaEl.textContent = `Stories with backlinks: ${fmtNum(total)}.`;
+      if (footerMetaEl) footerMetaEl.textContent = `Stories with backlinks: ${fmtNum(total)}.${yearSet.size > 0 ? ` Filtered by ${[...yearSet].sort((a, b) => b - a).join(', ')}.` : ''}`;
     }
 
     async function renderTopList(page, sortKey, yearSet) {
       const sort = normalizeSort(sortKey);
-      if (sort === 'linked') {
-        return renderBacklinks(page);
+      if (sort === 'raw_linked') {
+        return renderBacklinks(page, yearSet);
       }
       const rows = applyYearFilter(sortTopRows(topIndex.rows || [], sort), yearSet);
       const total = rows.length;
@@ -577,15 +752,19 @@
         const displayMemberCount = rep ? rep.memberCount : r.member_count;
 
         const clusterPoints = Math.round(Number(r.story_points_sum != null ? r.story_points_sum : (displayScore || 0)));
+        const discussionLabel = `${fmtNum(displayMemberCount)} discussions (${fmtNum(r.comment_count)} comments)`;
+        const statLabel = (sort === 'linked' || sort === 'ranked' || sort === 'custom_ranked')
+          ? `${fmtNum(r.incoming_link_count)} backlinks, ${discussionLabel}`
+          : discussionLabel;
         const siteTail = siteTailHtml(displayUrl);
         html += `
           <div class="row">
             <div class="title"><span class="ranknum">${rank}.</span> <span class="titleline"><a href="${clusterHref}">${esc(displayTitle || '[untitled]')}</a>${siteTail}</span></div>
             <div class="sub">
               by ${displayBy ? `<a href="${userUrl(displayBy)}">${esc(displayBy)}</a>` : '[unknown]'}
-              | ${fmtNum(clusterPoints)} points
+              ${(sort === 'linked' || sort === 'ranked' || sort === 'custom_ranked') ? '' : `| ${fmtNum(clusterPoints)} points`}
               | ${fmtTime(displayTime)}
-              | <a class="sublink" href="${clusterHref}">${fmtNum(displayMemberCount)} discussions (${fmtNum(r.comment_count)} comments)</a>
+              | <a class="sublink" href="${clusterHref}">${statLabel}</a>
             </div>
           </div>
         `;
@@ -752,10 +931,11 @@
         sqlite3 = await window.sqlite3InitModule();
         manifest = await fetchJsonMaybeGzip(PATHS.manifest);
         topIndex = await fetchJsonMaybeGzip(PATHS.top);
+        loadSavedCustomRankExpression();
         if (manifest && manifest.snapshot_time) {
           snapshotEl.textContent = `snapshot ${fmtTime(manifest.snapshot_time)}`;
         }
-        buildYearOptions(topIndex.rows || [], new Set());
+        buildYearOptions(topIndex.rows || [], topIndex.backlinks || [], new Set());
 
         const p = qs();
         const page = Math.max(1, parseInt(p.get('p') || '1', 10));
@@ -768,8 +948,16 @@
           topSortEl.value = sort;
           topSortEl.addEventListener('change', () => {
             const next = normalizeSort(topSortEl.value);
-            const years = yearsParamFromSet(selectedYearsFromControl());
             const q = new URLSearchParams(location.search);
+            const prevSort = normalizeSort(q.get('sort') || 'comments');
+            if (next === 'custom_ranked') {
+              const ok = promptForCustomRankExpression();
+              if (!ok) {
+                topSortEl.value = prevSort;
+                return;
+              }
+            }
+            const years = yearsParamFromSet(selectedYearsFromControl());
             q.set('sort', next);
             if (years) q.set('years', years); else q.delete('years');
             q.set('p', '1');

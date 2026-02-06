@@ -10,9 +10,9 @@ This document summarizes the `hn-related` sidecar pipeline and UI that were adde
   - regular branch (existing flow)
   - related branch (exclusive branch)
 - Related static artifacts:
-  - `docs/static-related-shards/*.sqlite.gz`
-  - `docs/static-related-manifest.json(.gz)`
-  - `docs/related-top.json(.gz)`
+  - `docs-related/static-related-shards/*.sqlite.gz`
+  - `docs-related/static-related-manifest.json(.gz)`
+  - `docs-related/related-top.json(.gz)`
 
 ## Build/Run
 
@@ -52,4 +52,3 @@ In that case, comments require upstream extract changes to include story comment
 - Sort + year controls in top bar (left)
 - Status/related-cluster stats in bottom footer
 - Cluster timeline grouped by day, then points within day
-

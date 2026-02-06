@@ -14,7 +14,7 @@
   },
   "scripts": {
     "etl": "node etl-hn.cjs --gzip",
-    "build-related": "node ./toool/s/build-related-index.mjs --gzip --target-mb 15",
+    "build-related": "node ./toool/s/build-related-index.mjs --gzip --target-mb 15 --out-dir docs-related/static-related-shards --out-manifest docs-related/static-related-manifest.json --top-index docs-related/related-top.json",
     "sync-docs": "cp docs/static.html docs/index.html",
     "serve": "node serve-dev.cjs",
     "serve-related": "DOCS_DIR=docs-related node serve-dev.cjs"

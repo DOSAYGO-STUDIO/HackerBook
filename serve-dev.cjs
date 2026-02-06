@@ -3,7 +3,7 @@ const { createServer } = require('http');
 const { readFile, stat } = require('fs/promises');
 const { join, extname } = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3111;
 const DOCS_DIR = join(__dirname, process.env.DOCS_DIR || 'docs');
 
 const MIME_TYPES = {

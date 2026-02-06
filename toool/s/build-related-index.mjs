@@ -9,9 +9,9 @@
  * - efficient chunked processing with bounded memory
  *
  * Outputs:
- * - docs/static-related-shards/related_<sid>_<hash>.sqlite.gz (or .sqlite)
- * - docs/static-related-manifest.json(.gz)
- * - docs/related-top.json(.gz)
+ * - docs-related/static-related-shards/related_<sid>_<hash>.sqlite.gz (or .sqlite)
+ * - docs-related/static-related-manifest.json(.gz)
+ * - docs-related/related-top.json(.gz)
  *
  * Internal resumable state:
  * - data/related-build/related-work.sqlite
@@ -38,9 +38,9 @@ const RANK_MODELS = Object.freeze({
 const DEFAULTS = {
   fromStaging: "data/static-staging-hn.sqlite",
   dataDir: "data/raw",
-  outDir: "docs/static-related-shards",
-  outManifest: "docs/static-related-manifest.json",
-  topIndex: "docs/related-top.json",
+  outDir: "docs-related/static-related-shards",
+  outManifest: "docs-related/static-related-manifest.json",
+  topIndex: "docs-related/related-top.json",
   workDb: "data/related-build/related-work.sqlite",
   batch: 4000,
   resolveBatch: 500,

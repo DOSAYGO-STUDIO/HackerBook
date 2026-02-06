@@ -8,6 +8,7 @@ shopt -s nullglob
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DOCS_DIR="${REPO_DIR}/docs"
+RELATED_DOCS_DIR="${REPO_DIR}/docs-related"
 RAW_DIR_PRIMARY="${REPO_DIR}/data/raw"
 RAW_DIR_ALT="${REPO_DIR}/toool/data/raw"
 USE_STAGING=0
@@ -697,17 +698,17 @@ else
   if [[ "${BUILD_BRANCH}" == "related" ]]; then
     pass "Running related branch only (regular ETL branch will be skipped)"
     confirm_step "Run related build now? (build-related-index.mjs --gzip --target-mb 15 --rank-model ${RELATED_RANK_MODEL} --max-links-per-item ${RELATED_MAX_LINKS_PER_ITEM} --link-dump-penalty-cap ${RELATED_LINK_DUMP_PENALTY_CAP})" \
-      in_repo node ./toool/s/build-related-index.mjs --gzip --target-mb 15 --rank-model "${RELATED_RANK_MODEL}" --max-links-per-item "${RELATED_MAX_LINKS_PER_ITEM}" --link-dump-penalty-cap "${RELATED_LINK_DUMP_PENALTY_CAP}" --from-staging data/static-staging-hn.sqlite --data "${RAW_DIR}"
+      in_repo node ./toool/s/build-related-index.mjs --gzip --target-mb 15 --rank-model "${RELATED_RANK_MODEL}" --max-links-per-item "${RELATED_MAX_LINKS_PER_ITEM}" --link-dump-penalty-cap "${RELATED_LINK_DUMP_PENALTY_CAP}" --from-staging data/static-staging-hn.sqlite --data "${RAW_DIR}" --out-dir "${RELATED_DOCS_DIR}/static-related-shards" --out-manifest "${RELATED_DOCS_DIR}/static-related-manifest.json" --top-index "${RELATED_DOCS_DIR}/related-top.json"
 
-    related_manifest_json="${DOCS_DIR}/static-related-manifest.json"
-    related_manifest_gz="${DOCS_DIR}/static-related-manifest.json.gz"
-    related_top_json="${DOCS_DIR}/related-top.json"
-    related_top_gz="${DOCS_DIR}/related-top.json.gz"
+    related_manifest_json="${RELATED_DOCS_DIR}/static-related-manifest.json"
+    related_manifest_gz="${RELATED_DOCS_DIR}/static-related-manifest.json.gz"
+    related_top_json="${RELATED_DOCS_DIR}/related-top.json"
+    related_top_gz="${RELATED_DOCS_DIR}/related-top.json.gz"
 
     if [[ -f "${related_manifest_json}" ]]; then
       confirm_step "Gzip static-related-manifest.json (-9)" gzip_replace "${related_manifest_json}" "${related_manifest_gz}"
     elif [[ -f "${related_manifest_gz}" ]]; then
-      related_time="$(latest_mtime_glob "${DOCS_DIR}/static-related-shards/*.sqlite*")"
+      related_time="$(latest_mtime_glob "${RELATED_DOCS_DIR}/static-related-shards/*.sqlite*")"
       if [[ "${related_time}" -gt 0 ]]; then
         assert_fresh "${related_manifest_gz}" "${related_time}"
       fi
@@ -729,7 +730,7 @@ else
     require_file "${related_top_gz}"
     gzip_test "${related_manifest_gz}"
     gzip_test "${related_top_gz}"
-    validate_manifest_shards "${related_manifest_gz}" "${DOCS_DIR}/static-related-shards" "related"
+    validate_manifest_shards "${related_manifest_gz}" "${RELATED_DOCS_DIR}/static-related-shards" "related"
     pass "Related branch artifacts verified"
     log ""
     pass "Related branch complete 🎉 (regular HackerBook build skipped by design)"
