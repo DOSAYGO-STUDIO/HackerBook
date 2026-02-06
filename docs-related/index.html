@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HN Related - HackerBook</title>
-  <meta name="description" content="Discover related Hacker News discussions clustered by topic. Find stories that sparked multiple conversations over the years.">
-  <meta property="og:title" content="HN Related - HackerBook">
-  <meta property="og:description" content="Discover related Hacker News discussions clustered by topic. Find stories that sparked multiple conversations over the years.">
+  <title>HN Backlinks - HackerBook</title>
+  <meta name="description" content="Discover which Hacker News stories are most linked from comments. Find the posts with the highest link reputation.">
+  <meta property="og:title" content="HN Backlinks - HackerBook">
+  <meta property="og:description" content="Discover which Hacker News stories are most linked from comments. Find the posts with the highest link reputation.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hn-related.dosaygo.com/">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="HN Related - HackerBook">
-  <meta name="twitter:description" content="Discover related Hacker News discussions clustered by topic.">
-  <link rel="icon" type="image/png" href="cd.png">
+  <meta name="twitter:title" content="HN Backlinks - HackerBook">
+  <meta name="twitter:description" content="Discover which Hacker News stories are most linked from comments.">
+  <link rel="icon" type="image/png" href="assets/msie2-2.png">
   <style>
     body { margin: 0; font: 10pt Verdana, Geneva, sans-serif; background: #f6f6ef; color: #000; }
     a { color: #000; text-decoration: none; }
@@ -37,8 +37,10 @@
     }
     .topbar .left, .topbar .right { display: flex; gap: 8px; align-items: center; }
     .name { font-weight: 700; display: flex; align-items: center; gap: 4px; }
-    .logo-icon { width: 16px; height: 16px; image-rendering: pixelated; }
+    .logo-icon { width: 18px; height: 18px; }
     .box { background: #f6f6ef; border: 0; }
+    body.loading { cursor: wait; }
+    .loading-indicator { text-align: center; padding: 40px 0; color: #828282; font-size: 10pt; }
     .row { margin: 0 0 12px 0; }
     .title { font-size: 10pt; }
     .titleline { display: inline; }
@@ -137,18 +139,17 @@
   </style>
   <script src="jswasm/sqlite3.js"></script>
 </head>
-<body>
+<body class="loading">
   <div id="hnmain">
     <div class="topbar">
       <div class="left">
-        <a class="name" href="https://hackerbook.dosaygo.com/"><img src="cd.png" alt="" class="logo-icon">Hacker Book</a>
-        <span>|</span>
-        <a href="/">hn-related</a>
+        <a class="name" href="/"><img src="assets/msie2-2.png" alt="" class="logo-icon">Hacker Backlinks</a>
         <span>|</span>
         <select id="top-sort">
           <option value="comments">most comments</option>
           <option value="points">most story points</option>
           <option value="discussions">most discussions</option>
+          <option value="linked">most linked</option>
           <option value="pure_recent">most recent</option>
         </select>
         <span class="years-wrap"><select id="top-years" size="1" multiple title="Filter by year (Cmd/Ctrl-click for multi-select)"></select></span>
@@ -159,9 +160,9 @@
         <span id="loading-status"></span>
       </div>
     </div>
-    <div id="content" class="box"></div>
+    <div id="content" class="box"><div class="loading-indicator">Loading...</div></div>
     <div class="footer">
-      <span id="footer-meta" class="hint">Related clusters: 0.</span>
+      <span id="footer-meta" class="hint">Backlink clusters: 0.</span>
       <span class="sep">|</span>
       <a href="https://github.com/crisdosyago">Made by Cris</a>
       <span class="sep">|</span>
@@ -257,7 +258,7 @@
     }
     function normalizeSort(v) {
       const s = String(v || 'comments').toLowerCase();
-      if (s === 'comments' || s === 'points' || s === 'discussions' || s === 'pure_recent') return s;
+      if (s === 'comments' || s === 'points' || s === 'discussions' || s === 'linked' || s === 'pure_recent') return s;
       return 'comments';
     }
     function parseYearsParam(v) {
@@ -450,8 +451,46 @@
       return `<div class="pager">${prev} | page ${page} | ${next}</div>`;
     }
 
+    async function renderBacklinks(page) {
+      const backlinks = topIndex.backlinks || [];
+      const total = backlinks.length;
+      const offset = (page - 1) * PAGE_SIZE;
+      const pageRows = backlinks.slice(offset, offset + PAGE_SIZE);
+      const hasPrev = page > 1;
+      const hasNext = offset + PAGE_SIZE < total;
+
+      let html = ``;
+      for (let i = 0; i < pageRows.length; i += 1) {
+        const r = pageRows[i];
+        const rank = offset + i + 1;
+        const hnHref = hnDiscussionUrl(r.story_id);
+        const siteTail = siteTailHtml(r.url);
+        html += `
+          <div class="row">
+            <div class="title"><span class="ranknum">${rank}.</span> <span class="titleline"><a href="${hnHref}" target="_blank" rel="noopener">${esc(r.title || '[untitled]')}</a>${siteTail}</span></div>
+            <div class="sub">
+              by ${r.by ? `<a href="${userUrl(r.by)}">${esc(r.by)}</a>` : '[unknown]'}
+              | ${fmtNum(r.score || 0)} points
+              | ${fmtTime(r.time)}
+              | <a class="sublink" href="${hnHref}" target="_blank" rel="noopener">${fmtNum(r.incoming_link_count)} backlinks</a>
+            </div>
+          </div>
+        `;
+      }
+      html += renderPager({ sort: 'linked' }, page, hasPrev, hasNext);
+      contentEl.innerHTML = html;
+      if (topSortEl) topSortEl.value = 'linked';
+      if (topYearsEl) {
+        for (const opt of topYearsEl.options) opt.selected = false;
+      }
+      if (footerMetaEl) footerMetaEl.textContent = `Stories with backlinks: ${fmtNum(total)}.`;
+    }
+
     async function renderTopList(page, sortKey, yearSet) {
       const sort = normalizeSort(sortKey);
+      if (sort === 'linked') {
+        return renderBacklinks(page);
+      }
       const rows = applyYearFilter(sortTopRows(topIndex.rows || [], sort), yearSet);
       const total = rows.length;
       const offset = (page - 1) * PAGE_SIZE;
@@ -557,7 +596,7 @@
       if (topYearsEl) {
         for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
       }
-      if (footerMetaEl) footerMetaEl.textContent = `Related clusters: ${fmtNum(total)}.`;
+      if (footerMetaEl) footerMetaEl.textContent = `Backlink clusters: ${fmtNum(total)}.`;
       void 0 // statusEl.textContent = `Loaded ${fmtNum(pageRows.length)} rows (page ${page}).`;
     }
 
@@ -649,7 +688,7 @@
 
       let html = `
         <div class="row">
-          <div class="title"><a href="${backHref}">← back to top related</a></div>
+          <div class="title"><a href="${backHref}">← back to backlinks</a></div>
           <div class="hr"></div>
           <div class="title"><b>${esc(comp.root_title || '[untitled]')}</b>${siteTailHtml(comp.root_url)}</div>
           <div class="sub">
@@ -704,7 +743,7 @@
       if (topYearsEl) {
         for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
       }
-      if (footerMetaEl) footerMetaEl.textContent = `Related clusters: ${fmtNum(applyYearFilter(topIndex.rows || [], yearSet).length)}.`;
+      if (footerMetaEl) footerMetaEl.textContent = `Backlink clusters: ${fmtNum(applyYearFilter(topIndex.rows || [], yearSet).length)}.`;
       void 0 // statusEl.textContent = `Loaded cluster ${cid}, showing ${members.length}/${fmtNum(total)} members.`;
     }
 
@@ -786,8 +825,9 @@
         } else {
           await renderTopList(page, sort, yearSet);
         }
+        document.body.classList.remove('loading');
       } catch (err) {
-        void 0 // statusEl.textContent = 'Failed to load related view.';
+        document.body.classList.remove('loading');
         contentEl.innerHTML = `<div class="row mono">${esc(err && err.message ? err.message : String(err))}</div>`;
       }
     }

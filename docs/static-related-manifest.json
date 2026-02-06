@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "created_at": "2026-02-05T15:13:38.541Z",
+  "created_at": "2026-02-06T05:36:34.018Z",
   "source_staging": "data/static-staging-hn.sqlite",
   "snapshot_time": 1770101396,
   "config": {
@@ -25,8 +25,8 @@
       "component_count": 3500,
       "member_count": 15264,
       "link_count": 15031,
-      "file": "related_0_82551ed1cfcf.sqlite.gz",
-      "bytes": 2214858
+      "file": "related_0_d9b0ba924d1c.sqlite.gz",
+      "bytes": 2206086
     },
     {
       "sid": 1,
@@ -35,8 +35,8 @@
       "component_count": 3500,
       "member_count": 10894,
       "link_count": 8576,
-      "file": "related_1_4b992cd30fb8.sqlite.gz",
-      "bytes": 1698522
+      "file": "related_1_4f529fdbd6b9.sqlite.gz",
+      "bytes": 1700541
     },
     {
       "sid": 2,
@@ -45,8 +45,8 @@
       "component_count": 3500,
       "member_count": 9757,
       "link_count": 6985,
-      "file": "related_2_ef30a757017d.sqlite.gz",
-      "bytes": 1551714
+      "file": "related_2_f4eace5362f9.sqlite.gz",
+      "bytes": 1552389
     },
     {
       "sid": 3,
@@ -55,8 +55,8 @@
       "component_count": 3500,
       "member_count": 9340,
       "link_count": 6393,
-      "file": "related_3_ea31167bfa46.sqlite.gz",
-      "bytes": 1509486
+      "file": "related_3_ec3dbfdae0c7.sqlite.gz",
+      "bytes": 1510427
     },
     {
       "sid": 4,
@@ -65,8 +65,8 @@
       "component_count": 3500,
       "member_count": 8809,
       "link_count": 5629,
-      "file": "related_4_4062aa5310ff.sqlite.gz",
-      "bytes": 1437392
+      "file": "related_4_d928f9b7233b.sqlite.gz",
+      "bytes": 1441108
     },
     {
       "sid": 5,
@@ -75,8 +75,8 @@
       "component_count": 3500,
       "member_count": 8533,
       "link_count": 5323,
-      "file": "related_5_c061c8b260ed.sqlite.gz",
-      "bytes": 1404527
+      "file": "related_5_c45568a6a99a.sqlite.gz",
+      "bytes": 1408151
     },
     {
       "sid": 6,
@@ -85,8 +85,8 @@
       "component_count": 3500,
       "member_count": 8249,
       "link_count": 4958,
-      "file": "related_6_752649d48eae.sqlite.gz",
-      "bytes": 1367005
+      "file": "related_6_4a26a3ba06b5.sqlite.gz",
+      "bytes": 1370946
     },
     {
       "sid": 7,
@@ -95,8 +95,8 @@
       "component_count": 3500,
       "member_count": 8112,
       "link_count": 4859,
-      "file": "related_7_13d02c56c383.sqlite.gz",
-      "bytes": 1347682
+      "file": "related_7_cc5069996c85.sqlite.gz",
+      "bytes": 1349327
     },
     {
       "sid": 8,
@@ -105,8 +105,8 @@
       "component_count": 3500,
       "member_count": 8151,
       "link_count": 4995,
-      "file": "related_8_36d7248cdbca.sqlite.gz",
-      "bytes": 1354466
+      "file": "related_8_64f46aa1b95b.sqlite.gz",
+      "bytes": 1357151
     },
     {
       "sid": 9,
@@ -115,8 +115,8 @@
       "component_count": 3500,
       "member_count": 7990,
       "link_count": 4760,
-      "file": "related_9_fcc63271eef9.sqlite.gz",
-      "bytes": 1312001
+      "file": "related_9_625e3d3c6a1f.sqlite.gz",
+      "bytes": 1311322
     },
     {
       "sid": 10,
@@ -125,8 +125,8 @@
       "component_count": 1559,
       "member_count": 3296,
       "link_count": 1780,
-      "file": "related_10_30bbf51e3dc5.sqlite.gz",
-      "bytes": 537879
+      "file": "related_10_054b0fab1bc2.sqlite.gz",
+      "bytes": 536700
     }
   ]
 }

@@ -29,7 +29,7 @@ import Database from "better-sqlite3";
 
 const SPINNER_FRAMES = ["|", "/", "-", "\\"];
 const PROGRESS_INTERVAL_MS = 100;
-const RELATED_WORK_SCHEMA_VERSION = "v8_full_comment_totals_resumable";
+const RELATED_WORK_SCHEMA_VERSION = "v9_incoming_links_backlinks_resumable";
 const RANK_MODELS = Object.freeze({
   points: "v2_cluster_points_sum_comment_2_718_ceil",
   legacy: "v1_legacy_mixed"
@@ -337,6 +337,33 @@ function tableColumns(db, tableName) {
     return new Set(rows.map((r) => String(r.name)));
   } catch {
     return new Set();
+  }
+}
+
+function hasTable(db, tableName) {
+  try {
+    const row = db
+      .prepare(
+        `
+          SELECT 1 AS ok
+          FROM sqlite_master
+          WHERE type='table' AND name=?
+          LIMIT 1
+        `
+      )
+      .get(String(tableName));
+    return Boolean(row?.ok);
+  } catch {
+    return false;
+  }
+}
+
+function tryCountRows(db, tableName) {
+  try {
+    const row = db.prepare(`SELECT COUNT(*) AS c FROM ${tableName}`).get();
+    return Number(row?.c || 0);
+  } catch {
+    return null;
   }
 }
 
@@ -1448,6 +1475,7 @@ async function phaseBuildComponents(ctx) {
         max_story_score INTEGER,
         story_points_sum REAL NOT NULL DEFAULT 0,
         comment_count INTEGER NOT NULL DEFAULT 0,
+        incoming_link_count INTEGER NOT NULL DEFAULT 0,
         years_csv TEXT
       );
       CREATE TABLE component_members(
@@ -1628,6 +1656,28 @@ async function phaseBuildComponents(ctx) {
     GROUP BY component_id;
     CREATE INDEX idx_component_years_id ON component_years(component_id);
 
+    -- Track incoming link counts per story (for "most linked" sort)
+    DROP TABLE IF EXISTS story_incoming_links;
+    CREATE TABLE story_incoming_links AS
+    SELECT
+      target_story_id AS story_id,
+      COUNT(*) AS incoming_link_count,
+      SUM(evidence_count) AS total_evidence_count
+    FROM edge_pruned
+    GROUP BY target_story_id;
+    CREATE INDEX idx_story_incoming_links_story ON story_incoming_links(story_id);
+
+    -- Aggregate incoming links per component (sum of all members' incoming links)
+    DROP TABLE IF EXISTS component_incoming_links;
+    CREATE TABLE component_incoming_links AS
+    SELECT
+      cs.component_id,
+      SUM(COALESCE(sil.incoming_link_count, 0)) AS incoming_link_count
+    FROM component_story cs
+    LEFT JOIN story_incoming_links sil ON sil.story_id = cs.story_id
+    GROUP BY cs.component_id;
+    CREATE INDEX idx_component_incoming_links_id ON component_incoming_links(component_id);
+
     DROP TABLE IF EXISTS component_index;
     CREATE TABLE component_index AS
     WITH member_stats AS (
@@ -1650,6 +1700,7 @@ async function phaseBuildComponents(ctx) {
         ms.max_story_score,
         COALESCE(csp.story_points_sum, 0) AS story_points_sum,
         COALESCE(cc.comment_count, 0) AS comment_count,
+        COALESCE(cil.incoming_link_count, 0) AS incoming_link_count,
         (
           COALESCE(ms.max_story_score,0) * 0.70 +
           COALESCE(ms.latest_time,0) * 0.000001 * 0.30 +
@@ -1662,6 +1713,7 @@ async function phaseBuildComponents(ctx) {
       LEFT JOIN component_edges_count ce ON ce.component_id = ms.component_id
       LEFT JOIN component_story_points csp ON csp.component_id = ms.component_id
       LEFT JOIN component_comment_counts cc ON cc.component_id = ms.component_id
+      LEFT JOIN component_incoming_links cil ON cil.component_id = ms.component_id
       WHERE ms.member_count >= 2
     )
     SELECT
@@ -1674,6 +1726,7 @@ async function phaseBuildComponents(ctx) {
       ri.max_story_score,
       ri.story_points_sum,
       ri.comment_count,
+      ri.incoming_link_count,
       cy.years_csv
     FROM rank_inputs ri
     LEFT JOIN component_years cy ON cy.component_id = ri.component_id;
@@ -1736,6 +1789,7 @@ function initRelatedShardDb(dbPath) {
       max_story_score INTEGER,
       story_points_sum REAL NOT NULL DEFAULT 0,
       comment_count INTEGER NOT NULL DEFAULT 0,
+      incoming_link_count INTEGER NOT NULL DEFAULT 0,
       years_csv TEXT,
       root_title TEXT,
       root_by TEXT,
@@ -1883,6 +1937,7 @@ async function phaseEmitArtifacts(ctx) {
       ci.max_story_score,
       ci.story_points_sum,
       ci.comment_count,
+      ci.incoming_link_count,
       ci.years_csv,
       sp.title AS root_title,
       sp.by AS root_by,
@@ -1926,9 +1981,9 @@ async function phaseEmitArtifacts(ctx) {
     shardDb = initRelatedShardDb(shardPath);
     insertComponent = shardDb.prepare(`
       INSERT INTO components(
-        component_id, root_story_id, member_count, edge_count, rank_score, latest_time, max_story_score, story_points_sum, comment_count,
+        component_id, root_story_id, member_count, edge_count, rank_score, latest_time, max_story_score, story_points_sum, comment_count, incoming_link_count,
         years_csv, root_title, root_by, root_time, root_score, root_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     insertMember = shardDb.prepare(`
       INSERT INTO component_members(component_id, story_id, rel_score, title, by, time, score, url)
@@ -1949,6 +2004,7 @@ async function phaseEmitArtifacts(ctx) {
         payload.component.max_story_score,
         payload.component.story_points_sum,
         payload.component.comment_count,
+        payload.component.incoming_link_count,
         payload.component.years_csv,
         payload.component.root_title,
         payload.component.root_by,
@@ -2033,7 +2089,8 @@ async function phaseEmitArtifacts(ctx) {
       edge_count: Number(comp.edge_count || 0),
       rank_score: Number(comp.rank_score || 0),
       story_points_sum: Number(comp.story_points_sum || 0),
-      comment_count: Number(comp.comment_count || 0)
+      comment_count: Number(comp.comment_count || 0),
+      incoming_link_count: Number(comp.incoming_link_count || 0)
     });
 
     if (emittedComponents % 100 === 0) {
@@ -2083,14 +2140,49 @@ async function phaseEmitArtifacts(ctx) {
   for (const shard of manifest.shards) delete shard._sqlite_path;
 
   await writeJsonMaybeGzip(args.outManifest, manifest, true);
+
+  // Build backlinks array: individual stories ranked by incoming link count
+  const backlinksRows = [];
+  const selectBacklinks = workDb.prepare(`
+    SELECT
+      sil.story_id,
+      sil.incoming_link_count,
+      sp.title,
+      sp.by,
+      sp.time,
+      sp.score,
+      sp.url
+    FROM story_incoming_links sil
+    JOIN story_profiles sp ON sp.story_id = sil.story_id
+    WHERE sil.incoming_link_count > 0
+    ORDER BY sil.incoming_link_count DESC, COALESCE(sp.score, 0) DESC, COALESCE(sp.time, 0) DESC
+    LIMIT 10000
+  `);
+  let backlinksRank = 0;
+  for (const row of selectBacklinks.iterate()) {
+    backlinksRank += 1;
+    backlinksRows.push({
+      rank: backlinksRank,
+      story_id: Number(row.story_id),
+      title: row.title || null,
+      by: row.by || null,
+      time: row.time == null ? null : Number(row.time),
+      score: row.score == null ? null : Number(row.score),
+      url: row.url || null,
+      incoming_link_count: Number(row.incoming_link_count || 0)
+    });
+  }
+
   await writeJsonMaybeGzip(args.topIndex, {
-    version: 1,
+    version: 2,
     generated_at: nowIso(),
     rank_model_version: rankModelVersion,
     totals: {
-      components: totalComponents
+      components: totalComponents,
+      backlinks: backlinksRows.length
     },
-    rows: topRows
+    rows: topRows,
+    backlinks: backlinksRows
   }, true);
 
   markPhaseDone(workDb, doneKey);
@@ -2172,6 +2264,33 @@ async function main() {
       const fromSchema = existingSchemaVersion || "unversioned";
       progress.done(`Related schema changed (${fromSchema} -> ${RELATED_WORK_SCHEMA_VERSION}); invalidated phases 3/5/6`);
     }
+
+    if (getMetaBool(workDb, "phase_components_done")) {
+      const requiredTables = [
+        "edge_pruned",
+        "component_index",
+        "story_incoming_links",
+        "component_incoming_links"
+      ];
+      const missingTables = requiredTables.filter((t) => !hasTable(workDb, t));
+      const componentIndexCols = tableColumns(workDb, "component_index");
+      if (missingTables.length || !componentIndexCols.has("incoming_link_count")) {
+        setMeta(workDb, "phase_components_done", "0");
+        setMeta(workDb, "phase_emit_done", "0");
+        const missingLabel = missingTables.length ? ` missing=${missingTables.join(",")}` : "";
+        const colLabel = componentIndexCols.has("incoming_link_count") ? "" : " missing=component_index.incoming_link_count";
+        progress.done(`Detected incomplete backlinks inputs; invalidated phases 5/6.${missingLabel || colLabel ? ` (${missingLabel || colLabel})` : ""}`);
+      } else {
+        const edgeCount = tryCountRows(workDb, "edge_pruned");
+        const incomingCount = tryCountRows(workDb, "story_incoming_links");
+        if (edgeCount != null && edgeCount > 0 && incomingCount === 0) {
+          setMeta(workDb, "phase_components_done", "0");
+          setMeta(workDb, "phase_emit_done", "0");
+          progress.done(`Detected edges without backlink counts; invalidated phases 5/6 (edge_pruned=${fmtNum(edgeCount)}, story_incoming_links=0)`);
+        }
+      }
+    }
+
     const staleCommentTotals = Number(
       workDb.prepare("SELECT COUNT(*) AS c FROM story_profiles WHERE comment_total < 0").get()?.c || 0
     );
