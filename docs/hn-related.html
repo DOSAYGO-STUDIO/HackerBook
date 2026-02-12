@@ -41,8 +41,8 @@
     body.loading { cursor: wait; }
     .loading-indicator { text-align: center; padding: 40px 0; color: #828282; font-size: 10pt; }
     .row { margin: 0 0 12px 0; }
-    .title { font-size: 10pt; }
-    .titleline { display: inline; }
+    .title { font-size: 10pt; display: flex; align-items: baseline; }
+    .titleline { min-width: 0; }
     .sub { color: #828282; font-size: 8.5pt; margin-top: 2px; }
     .sitebit { color: #828282; font-size: 8.5pt; }
     .sitestr { color: #828282; }
@@ -85,13 +85,15 @@
     }
     .timeline-items { margin-left: 6px; }
     .timeline-item { margin: 0 0 10px 0; }
-    .num { color: #828282; margin-right: 6px; font-size: 8.5pt; }
-    .ranknum { color: #828282; margin-right: 4px; font-size: 8.5pt; }
+    .num { color: #828282; margin-right: 6px; font-size: 8.5pt; flex-shrink: 0; }
+    .ranknum { color: #828282; margin-right: 4px; font-size: 8.5pt; flex-shrink: 0; }
     .mono { font-family: Menlo, Monaco, Consolas, monospace; }
     .hint { color: #666; font-size: 8.5pt; }
     #snapshot { color: #000; }
     #loading-status { color: #fff; font-size: 8pt; font-family: ui-monospace, Menlo, Consolas, monospace; margin-left: 8px; }
-    #top-sort, #top-years { font: 8.5pt Verdana, Geneva, sans-serif; }
+    #top-years { font: 8.5pt Verdana, Geneva, sans-serif; }
+    .sort-link { color: #000; font-size: 8.5pt; white-space: nowrap; }
+    .sort-link.active { font-weight: 700; }
     .years-wrap { position: relative; display: inline-block; }
     #top-years {
       height: 20px;
@@ -113,22 +115,32 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
     #top-years-clear { font: 8.5pt Verdana, Geneva, sans-serif; height: 20px; }
-    /* Mobile: larger tap targets */
+    .about { max-width: 600px; line-height: 1.6; font-size: 9.5pt; color: #333; }
+    .about h3 { font-size: 11pt; margin: 0 0 12px 0; color: #000; }
+    .about h4 { font-size: 9.5pt; margin: 14px 0 4px 0; color: #000; }
+    .about p { margin: 0 0 8px 0; }
+    .about code { background: #f0f0f0; padding: 1px 4px; font-size: 9pt; font-family: Menlo, Monaco, Consolas, monospace; }
+    /* Mobile: tight layout, hard edges */
     @media (max-width: 768px) {
-      .topbar { padding: 8px; }
-      .topbar .left { flex-wrap: wrap; gap: 6px; }
-      #top-sort, #top-years, #top-years-clear {
-        font-size: 10pt;
-        height: 32px;
-        line-height: 32px;
-        padding: 0 8px;
-        min-height: 44px; /* iOS recommended tap target */
+      #hnmain { width: 100%; margin: 0; padding: 0 6px; box-sizing: border-box; }
+      .topbar { padding: 6px 10px; }
+      .topbar .left {
+        flex-wrap: wrap; gap: 2px 6px; width: 100%; align-items: baseline;
       }
-      #top-years { width: 9ch; }
-      #top-years-clear { min-width: 44px; }
+      .topbar .left > .name {
+        width: 100%; padding-bottom: 4px; box-sizing: border-box;
+        border-bottom: 1px solid rgba(0,0,0,0.12); margin-bottom: 2px;
+      }
+      .sort-link { font-size: 9pt; padding: 4px 0; }
+      #top-years, #top-years-clear {
+        font-size: 9pt; height: 24px; line-height: 24px;
+        padding: 0 4px; border-radius: 0;
+      }
+      #top-years { width: auto; min-width: 7ch; }
+      .topbar .right { padding: 2px 0; justify-content: flex-end; }
       .row { padding: 4px 0; }
       .title, .sub { padding: 2px 0; }
-      a { padding: 4px 0; display: inline-block; }
+      .sub a { padding: 2px 0; }
     }
     .hr { border-top: 1px solid #ddd; margin: 10px 0; }
     .topbar { margin-bottom: 10px; }
@@ -144,13 +156,16 @@
       <div class="left">
         <a class="name" href="hn-related.html"><img src="assets/msie2-2.png" alt="" class="logo-icon">Hacker Backlinks</a>
         <span>|</span>
-        <select id="top-sort">
-          <option value="comments">most comments</option>
-          <option value="points">most story points</option>
-          <option value="discussions">most discussions</option>
-          <option value="linked">most linked</option>
-          <option value="pure_recent">most recent</option>
-        </select>
+        <a class="sort-link" data-sort="comments" href="?sort=comments">comments</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="points" href="?sort=points">points</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="discussions" href="?sort=discussions">discussed</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="linked" href="?sort=linked">linked</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="pure_recent" href="?sort=pure_recent">new</a>
+        <span>|</span>
         <span class="years-wrap"><select id="top-years" size="1" multiple title="Filter by year (Cmd/Ctrl-click for multi-select)"></select></span>
         <button id="top-years-clear" type="button">clear</button>
       </div>
@@ -163,7 +178,13 @@
     <div class="footer">
       <span id="footer-meta" class="hint">Backlink clusters: 0.</span>
       <span class="sep">|</span>
-      <a href="https://github.com/crisdosyago">Made by Cris</a>
+      <a href="?about=1">About</a>
+      <span class="sep">|</span>
+      <a href="https://hackerbook.dosaygo.com">HackerBook</a>
+      <span class="sep">|</span>
+      <a href="mailto:hey@browserbox.io">Contact</a>
+      <span class="sep">|</span>
+      <a href="https://github.com/crisdosaygo">crisdosaygo</a>
       <span class="sep">|</span>
       <a href="https://news.ycombinator.com">Visit HN</a>
     </div>
@@ -182,7 +203,6 @@
     const footerMetaEl = document.getElementById('footer-meta');
     const snapshotEl = document.getElementById('snapshot');
     const loadingStatusEl = document.getElementById('loading-status');
-    const topSortEl = document.getElementById('top-sort');
     const topYearsEl = document.getElementById('top-years');
     const topYearsClearEl = document.getElementById('top-years-clear');
 
@@ -259,6 +279,11 @@
       const s = String(v || 'comments').toLowerCase();
       if (s === 'comments' || s === 'points' || s === 'discussions' || s === 'linked' || s === 'pure_recent') return s;
       return 'comments';
+    }
+    function highlightSortLink(sort) {
+      document.querySelectorAll('.sort-link').forEach(el => {
+        el.classList.toggle('active', el.dataset.sort === sort);
+      });
     }
     function parseYearsParam(v) {
       const set = new Set();
@@ -478,7 +503,7 @@
       }
       html += renderPager({ sort: 'linked' }, page, hasPrev, hasNext);
       contentEl.innerHTML = html;
-      if (topSortEl) topSortEl.value = 'linked';
+      highlightSortLink('linked');
       if (topYearsEl) {
         for (const opt of topYearsEl.options) opt.selected = false;
       }
@@ -591,7 +616,7 @@
       }
       html += renderPager(yearsParam ? { sort, years: yearsParam } : { sort }, page, hasPrev, hasNext);
       contentEl.innerHTML = html;
-      if (topSortEl) topSortEl.value = sort;
+      highlightSortLink(sort);
       if (topYearsEl) {
         for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
       }
@@ -738,12 +763,42 @@
       html += renderPager({ cid: String(cid), sort }, page, hasPrev, hasNext);
 
       contentEl.innerHTML = html;
-      if (topSortEl) topSortEl.value = sort;
+      highlightSortLink(sort);
       if (topYearsEl) {
         for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
       }
       if (footerMetaEl) footerMetaEl.textContent = `Backlink clusters: ${fmtNum(applyYearFilter(topIndex.rows || [], yearSet).length)}.`;
       void 0 // statusEl.textContent = `Loaded cluster ${cid}, showing ${members.length}/${fmtNum(total)} members.`;
+    }
+
+    function renderAbout(sort, yearSet) {
+      const yearsParam = yearsParamFromSet(yearSet);
+      const backQs = new URLSearchParams({ sort });
+      if (yearsParam) backQs.set('years', yearsParam);
+      const backHref = `hn-related.html?${backQs.toString()}`;
+      contentEl.innerHTML = `
+        <div class="row">
+          <div class="title"><a href="${backHref}">&larr; back to backlinks</a></div>
+          <div class="hr"></div>
+        </div>
+        <div class="about">
+          <h3>How Hacker Backlinks Works</h3>
+          <p>Every HN comment is scanned for links to other HN stories. When a comment on Story&nbsp;A links to Story&nbsp;B, that&rsquo;s a <b>backlink</b> &mdash; evidence that the two discussions are related.</p>
+          <h4>Link extraction</h4>
+          <p>Regex patterns scan all comment text for <code>item?id=</code> references. Comments that say &ldquo;related:&rdquo; or &ldquo;past:&rdquo; get a keyword boost. Each comment can contribute up to 12 outbound links.</p>
+          <h4>Story resolution</h4>
+          <p>Comments live deep in reply chains. A recursive walk up the parent chain (up to 40 levels) maps each comment back to its root story, so the link is attributed to the right discussion.</p>
+          <h4>Similarity scoring</h4>
+          <p>Each story gets a token profile: title and text, lowercased, with stop-words removed. For every pair of linked stories, a <b>Jaccard similarity</b> score measures how much their tokens overlap. Edge weights combine source alignment (how similar the linking story is to its targets) with self-consistency (how similar the targets are to each other). Low-quality edges are pruned.</p>
+          <h4>Clustering</h4>
+          <p>A <b>union-find</b> algorithm groups stories into connected components. If Story&nbsp;A links to Story&nbsp;B, and Story&nbsp;B links to Story&nbsp;C, all three join the same cluster &mdash; a constellation of related discussions that can span years.</p>
+          <h4>Ranking</h4>
+          <p>Clusters are ranked by aggregate story points and comment volume. The top index is precomputed. Individual cluster data lives in gzip-compressed SQLite shards that load on demand.</p>
+          <h4>Everything runs in your browser</h4>
+          <p>The database is split into ~15&nbsp;MB SQLite shards. <b>sqlite3-wasm</b> (1&nbsp;MB) executes queries client-side via WebAssembly. There is no server-side search &mdash; just static files on a CDN.</p>
+        </div>
+      `;
+      if (footerMetaEl) footerMetaEl.textContent = 'About Hacker Backlinks.';
     }
 
     async function init() {
@@ -763,10 +818,11 @@
         if (topYearsEl) {
           for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
         }
-        if (topSortEl) {
-          topSortEl.value = sort;
-          topSortEl.addEventListener('change', () => {
-            const next = normalizeSort(topSortEl.value);
+        highlightSortLink(sort);
+        document.querySelectorAll('.sort-link').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const next = normalizeSort(link.dataset.sort);
             const years = yearsParamFromSet(selectedYearsFromControl());
             const q = new URLSearchParams(location.search);
             q.set('sort', next);
@@ -775,7 +831,7 @@
             q.delete('cid');
             location.search = q.toString();
           });
-        }
+        });
         if (topYearsEl) {
           let initialYearsParam = yearsParamFromSet(yearSet);
           topYearsEl.addEventListener('mousedown', (e) => {
@@ -819,7 +875,9 @@
           });
         }
         const cid = p.get('cid');
-        if (cid) {
+        if (p.has('about')) {
+          renderAbout(sort, yearSet);
+        } else if (cid) {
           await renderCluster(cid, page, sort, yearSet);
         } else {
           await renderTopList(page, sort, yearSet);
