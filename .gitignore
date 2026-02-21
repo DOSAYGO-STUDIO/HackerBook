@@ -1,0 +1,15 @@
+.*.swp
+*.log
+node_modules/.cache/
+node_modules/
+data/
+docs/static-shards
+docs/static-shards/
+docs/static-shards/*.sqlite
+docs/static-shards/*.sqlite.gz
+docs/static-user-stats-shards/*.sqlite
+docs/static-user-stats-shards/*.sqlite.gz
+docs/cross-shard-index.bin
+*journal
+*.wal
+*.shm

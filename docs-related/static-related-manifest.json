@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "created_at": "2026-02-18T10:53:46.312Z",
+  "source_staging": "../data/static-staging-hn.sqlite",
+  "snapshot_time": 1770100943,
+  "config": {
+    "rank_model_version": "v2_cluster_points_sum_comment_2_718_ceil",
+    "min_edge_weight": 0.18,
+    "max_edges_per_source": 5,
+    "max_links_per_item": 12,
+    "link_dump_penalty_cap": 8,
+    "semantic_relax_weight": 0.35,
+    "surprise_max_lexical": 0.08,
+    "surprise_min_semantic": 0.2,
+    "surprise_min_weight": 0.18,
+    "surprise_limit": 1500,
+    "target_mb": 15,
+    "components_per_shard": 3500
+  },
+  "totals": {
+    "components": 34685,
+    "members": 92685,
+    "links": 65277
+  },
+  "shards": [
+    {
+      "sid": 0,
+      "rank_lo": 1,
+      "rank_hi": 3500,
+      "component_count": 3500,
+      "member_count": 14687,
+      "link_count": 14442,
+      "file": "related_0_831a5c46643f.sqlite.gz",
+      "bytes": 2212145
+    },
+    {
+      "sid": 1,
+      "rank_lo": 3501,
+      "rank_hi": 7000,
+      "component_count": 3500,
+      "member_count": 10645,
+      "link_count": 8292,
+      "file": "related_1_7880b3d5c0ca.sqlite.gz",
+      "bytes": 1686341
+    },
+    {
+      "sid": 2,
+      "rank_lo": 7001,
+      "rank_hi": 10500,
+      "component_count": 3500,
+      "member_count": 9585,
+      "link_count": 6818,
+      "file": "related_2_b37cde126674.sqlite.gz",
+      "bytes": 1557267
+    },
+    {
+      "sid": 3,
+      "rank_lo": 10501,
+      "rank_hi": 14000,
+      "component_count": 3500,
+      "member_count": 9268,
+      "link_count": 6302,
+      "file": "related_3_5c7b9bb726fd.sqlite.gz",
+      "bytes": 1519304
+    },
+    {
+      "sid": 4,
+      "rank_lo": 14001,
+      "rank_hi": 17500,
+      "component_count": 3500,
+      "member_count": 8687,
+      "link_count": 5505,
+      "file": "related_4_e30f4465e189.sqlite.gz",
+      "bytes": 1427528
+    },
+    {
+      "sid": 5,
+      "rank_lo": 17501,
+      "rank_hi": 21000,
+      "component_count": 3500,
+      "member_count": 8411,
+      "link_count": 5167,
+      "file": "related_5_4e98df3df4f2.sqlite.gz",
+      "bytes": 1396595
+    },
+    {
+      "sid": 6,
+      "rank_lo": 21001,
+      "rank_hi": 24500,
+      "component_count": 3500,
+      "member_count": 8190,
+      "link_count": 4912,
+      "file": "related_6_f0a9e7e908fb.sqlite.gz",
+      "bytes": 1371764
+    },
+    {
+      "sid": 7,
+      "rank_lo": 24501,
+      "rank_hi": 28000,
+      "component_count": 3500,
+      "member_count": 8089,
+      "link_count": 4848,
+      "file": "related_7_d38c0de95910.sqlite.gz",
+      "bytes": 1357740
+    },
+    {
+      "sid": 8,
+      "rank_lo": 28001,
+      "rank_hi": 31500,
+      "component_count": 3500,
+      "member_count": 8127,
+      "link_count": 5027,
+      "file": "related_8_1ead6b6b7914.sqlite.gz",
+      "bytes": 1359480
+    },
+    {
+      "sid": 9,
+      "rank_lo": 31501,
+      "rank_hi": 34685,
+      "component_count": 3185,
+      "member_count": 6996,
+      "link_count": 3964,
+      "file": "related_9_b09c8c7b5f09.sqlite.gz",
+      "bytes": 1146143
+    }
+  ]
+}

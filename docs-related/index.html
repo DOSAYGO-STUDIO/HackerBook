@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HN-TROPY - Interesting story pairings from across the Hacker News Corpus</title>
+  <meta name="description" content="HN-TROPY - Interesting story pairings from across the Hacker News Corpus. Semantic outliers and surprising links across decades of Hacker News.">
+  <meta property="og:title" content="HN-TROPY - Interesting story pairings from across the Hacker News Corpus">
+  <meta property="og:description" content="Semantic outliers and surprising links across decades of Hacker News.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://hacker-backlinks.dosaygo.com/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="HN-TROPY - Interesting story pairings from across the Hacker News Corpus">
+  <meta name="twitter:description" content="Semantic outliers and surprising links across decades of Hacker News.">
+  <link rel="icon" type="image/png" href="assets/claude-shannon-favicon.png">
+  <style>
+    body { margin: 0; font: 13pt Verdana, Geneva, sans-serif; background: #f6f6ef; color: #000; }
+    a { color: #000; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    #hnmain { width: 92%; margin: 8px auto; background: #f6f6ef; }
+    .hero-banner {
+      text-align: center; padding: 38px 16px 28px; background: #f6f6ef;
+    }
+    .hero-banner h1 {
+      font-size: 42pt; font-weight: 900; letter-spacing: -1px; margin: 0 0 8px 0;
+      text-transform: uppercase; color: #000;
+    }
+    .hero-tagline {
+      font-size: 17pt; font-weight: 700; color: #ff6600; margin: 0;
+      text-transform: uppercase; letter-spacing: 2px;
+    }
+    .topbar {
+      background: linear-gradient(to right,
+        #ff6600 0%,
+        #ff6600 20%,
+        #ffef00 50%,
+        #fffef0 75%,
+        #ffffff 82%,
+        #8b00ff 88%,
+        #4400ff 90%,
+        #00bfff 93%,
+        #00ff00 95%,
+        #ffff00 97%,
+        #ff8000 98.5%,
+        #ff0000 100%
+      );
+      padding: 10px 12px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    }
+    .topbar .left, .topbar .right { display: flex; gap: 8px; align-items: center; }
+    .name { font-weight: 900; display: flex; align-items: center; gap: 6px; font-size: 15pt; text-transform: uppercase; letter-spacing: 1px; }
+    .logo-icon { width: 28px; height: 28px; image-rendering: pixelated; }
+    .box { background: #f6f6ef; border: 0; }
+    body.loading { cursor: wait; }
+    .loading-indicator { text-align: center; padding: 60px 0; color: #ff6600; font-size: 18pt; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; }
+    .row { margin: 0 0 16px 0; }
+    .title { font-size: 14pt; display: flex; align-items: baseline; font-weight: 700; }
+    .titleline { min-width: 0; }
+    .sub { color: #828282; font-size: 11pt; margin-top: 4px; }
+    .sitebit { color: #828282; font-size: 11pt; }
+    .sitestr { color: #828282; }
+    .sublink { color: #828282; }
+    .pager { margin: 18px 0 24px 0; color: #828282; font-size: 13pt; }
+    .pager a { color: #000; }
+    .timeline { position: relative; padding-left: 26px; margin-top: 4px; }
+    .timeline:before {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #d7d7d7;
+    }
+    .timeline-day { position: relative; margin: 0 0 14px 0; }
+    .timeline-day-label {
+      display: inline-block;
+      position: relative;
+      margin: 0 0 8px 0;
+      padding: 4px 12px;
+      border: 1px solid #ddd;
+      background: #fff9e6;
+      color: #444;
+      font-size: 12pt;
+      font-weight: 700;
+      border-radius: 10px;
+    }
+    .timeline-day-label:before {
+      content: "";
+      position: absolute;
+      left: -22px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: #ff6600;
+      border: 1px solid #c84d00;
+    }
+    .timeline-items { margin-left: 6px; }
+    .timeline-item { margin: 0 0 10px 0; }
+    .num { color: #828282; margin-right: 8px; font-size: 11pt; flex-shrink: 0; }
+    .ranknum { color: #828282; margin-right: 6px; font-size: 11pt; flex-shrink: 0; }
+    .mono { font-family: Menlo, Monaco, Consolas, monospace; }
+    .hint { color: #666; font-size: 11pt; }
+    .view-explainer { color: #777; font-size: 10pt; line-height: 1.35; margin: 0 0 12px 0; }
+    #snapshot { color: #000; }
+    #loading-status { color: #fff; font-size: 10pt; font-family: ui-monospace, Menlo, Consolas, monospace; margin-left: 8px; }
+    #top-years { font: 11pt Verdana, Geneva, sans-serif; vertical-align: middle; }
+    .sort-link { color: #000; font-size: 11pt; white-space: nowrap; font-weight: 600; }
+    .sort-link.active { font-weight: 900; }
+    .years-wrap { position: relative; display: inline-block; }
+    #top-years {
+      text-align: center;
+      padding: 1px 0;
+      width: 11ch;
+    }
+    #top-years.expanded {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: auto;
+      width: auto;
+      min-width: 11ch;
+      z-index: 100;
+      background: #fff;
+      border: 1px solid #999;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    #top-years-clear { font: 11pt Verdana, Geneva, sans-serif; height: 24px; }
+    .about { max-width: 720px; line-height: 1.7; font-size: 13pt; color: #333; }
+    .about h3 { font-size: 22pt; margin: 0 0 16px 0; color: #000; font-weight: 900; text-transform: uppercase; }
+    .about h4 { font-size: 14pt; margin: 18px 0 6px 0; color: #000; font-weight: 800; }
+    .about p { margin: 0 0 12px 0; font-size: 13pt; }
+    .about code { background: #f0f0f0; padding: 2px 6px; font-size: 12pt; font-family: Menlo, Monaco, Consolas, monospace; }
+    /* Mobile: tight layout, hard edges */
+    @media (max-width: 768px) {
+      body { font-size: 10pt; line-height: 1.25; }
+      #hnmain { width: 100%; margin: 0; padding: 0 4px; box-sizing: border-box; }
+      .topbar { padding: 4px 6px; gap: 6px; }
+      .name { font-size: 11pt; letter-spacing: 0; gap: 4px; }
+      .logo-icon { width: 18px; height: 18px; }
+      .topbar .left {
+        flex-wrap: wrap; gap: 1px 5px; width: 100%; align-items: baseline;
+      }
+      .topbar .left > .name {
+        width: 100%; padding-bottom: 2px; box-sizing: border-box;
+        border-bottom: 1px solid rgba(0,0,0,0.12); margin-bottom: 1px;
+      }
+      .sort-link { font-size: 9pt; padding: 1px 0; }
+      #top-years, #top-years-clear {
+        font-size: 9pt; height: 22px; line-height: 22px;
+        padding: 0 3px; border-radius: 0;
+      }
+      #top-years { width: auto; min-width: 7ch; }
+      .topbar .right { padding: 1px 0; justify-content: flex-end; font-size: 8pt; }
+      #snapshot, #loading-status, .hint { font-size: 8pt; }
+      .hero-banner { padding: 10px 6px 8px; }
+      .hero-banner h1 { font-size: 16pt; letter-spacing: 0; margin-bottom: 3px; }
+      .hero-tagline { font-size: 8pt; letter-spacing: 0.8px; }
+      .row { padding: 2px 0; margin-bottom: 10px; }
+      .title { font-size: 10pt; padding: 1px 0; }
+      .sub { font-size: 8pt; margin-top: 2px; padding: 1px 0; }
+      .ranknum, .num { font-size: 8pt; margin-right: 5px; }
+      .pager { font-size: 10pt; margin: 10px 0 14px 0; }
+      .timeline { padding-left: 18px; }
+      .timeline:before { left: 7px; }
+      .timeline-day-label { font-size: 9pt; padding: 2px 8px; margin-bottom: 6px; }
+      .view-explainer { font-size: 8pt; margin-bottom: 8px; }
+      .footer { font-size: 9pt; margin: 18px 0 12px 0; padding-top: 10px; }
+      .about { font-size: 10pt; line-height: 1.45; }
+      .about h3 { font-size: 15pt; margin-bottom: 10px; }
+      .about h4 { font-size: 10pt; margin: 12px 0 4px 0; }
+      .about p { font-size: 10pt; margin-bottom: 8px; }
+    }
+    .hr { border-top: 1px solid #ddd; margin: 10px 0; }
+    .topbar { margin-bottom: 10px; }
+    .box { padding-top: 10px; }
+    .footer { text-align: center; margin: 40px 0 24px 0; padding-top: 18px; border-top: 4px solid #ff6600; color: #666; font-size: 12pt; font-weight: 600; }
+    .footer .sep { color: #999; margin: 0 6px; }
+  </style>
+  <script src="jswasm/sqlite3.js"></script>
+</head>
+<body class="loading">
+  <div id="hnmain">
+    <div class="topbar">
+      <div class="left">
+        <a class="name" href="/"><img src="assets/claude-shannon-favicon.png" alt="" class="logo-icon">HN-TROPY</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="comments" href="?sort=comments" title="Sort by most total comments">comments</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="points" href="?sort=points" title="Sort by most total points">points</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="discussions" href="?sort=discussions" title="Sort by most discussions">discussed</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="linked" href="?sort=linked" title="Sort by most total links">linked</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="raw_linked" href="?sort=raw_linked" title="Sort by most total backlinks">backlinked</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="pure_recent" href="?sort=pure_recent" title="Sort by most recent">new</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="ranked" href="?sort=ranked" title="Sort by a ranking function">ranked</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="interesting" href="?sort=interesting" title="Sort by semantic surprise / entropy">interesting</a>
+        <span>|</span>
+        <a class="sort-link" data-sort="custom_ranked" href="?sort=custom_ranked" title="BYO ranking function">custom</a>
+        <span>|</span>
+        <span class="years-wrap"><select id="top-years" size="1" multiple title="Limit to year (Cmd/Ctrl-click for multi-select)"></select></span>
+        <button id="top-years-clear" type="button" title="Clear year filters">clear</button>
+      </div>
+      <div class="right">
+        <span id="snapshot" class="hint"></span>
+        <span id="loading-status"></span>
+      </div>
+    </div>
+    <div class="hero-banner">
+      <h1>HN-TROPY</h1>
+      <p class="hero-tagline">Interesting story pairings from across the Hacker News Corpus</p>
+    </div>
+    <div id="content" class="box"><div class="loading-indicator">LOADING HN-TROPY DATA...</div></div>
+    <div class="footer">
+      <span id="footer-meta" class="hint">Interesting themes: 0.</span>
+      <span class="sep">|</span>
+      <a href="?about=1">About</a>
+      <span class="sep">|</span>
+      <a href="https://hackerbook.dosaygo.com">HackerBook</a>
+      <span class="sep">|</span>
+      <a href="mailto:hey@browserbox.io">Contact</a>
+      <span class="sep">|</span>
+      <a href="https://github.com/crisdosaygo">crisdosaygo</a>
+      <span class="sep">|</span>
+      <a href="https://news.ycombinator.com">Visit HN</a>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const PAGE_SIZE = 30;
+    const PATHS = {
+      manifest: 'static-related-manifest.json.gz',
+      top: 'related-top.json.gz',
+      shards: 'static-related-shards/'
+    };
+
+    const contentEl = document.getElementById('content');
+    const footerMetaEl = document.getElementById('footer-meta');
+    const snapshotEl = document.getElementById('snapshot');
+    const loadingStatusEl = document.getElementById('loading-status');
+    const topYearsEl = document.getElementById('top-years');
+    const topYearsClearEl = document.getElementById('top-years-clear');
+
+    let sqlite3 = null;
+    let manifest = null;
+    let topIndex = null;
+    const shardCache = new Map();
+    const topSortCache = new Map();
+    const CUSTOM_RANK_STORAGE_KEY = 'hb_related_custom_rank_expr_v1';
+    const DEFAULT_CUSTOM_RANK_EXPR = '0.50*log1p(backlinks)+0.25*log1p(discussions)+0.15*log1p(comments)+0.10*log1p(points)';
+    const CUSTOM_RANK_ALLOWED_IDS = new Set([
+      'backlinks', 'discussions', 'comments', 'points', 'time', 'rank',
+      'ln', 'log', 'log1p', 'sqrt', 'pow', 'min', 'max', 'abs',
+      'round', 'floor', 'ceil', 'exp', 'PI', 'E'
+    ]);
+    let customRankExpr = '';
+    let customRankFn = null;
+
+    function qs() { return new URLSearchParams(location.search); }
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function fmtNum(n) { return Number(n || 0).toLocaleString('en-US'); }
+    function fmtTime(ts) {
+      if (!ts) return '';
+      try {
+        return new Date(ts * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      } catch {
+        return '';
+      }
+    }
+    function dayBucket(ts) {
+      const n = Number(ts || 0);
+      if (!Number.isFinite(n) || n <= 0) return 0;
+      return Math.floor(n / 86400);
+    }
+    function yearFromTs(ts) {
+      const n = Number(ts || 0);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      try {
+        return new Date(n * 1000).getUTCFullYear();
+      } catch {
+        return null;
+      }
+    }
+    function dayKey(ts) {
+      if (!ts) return 'Unknown date';
+      try {
+        return new Date(ts * 1000).toISOString().slice(0, 10);
+      } catch {
+        return 'Unknown date';
+      }
+    }
+    function fmtDayLabel(dayStr) {
+      if (!dayStr || dayStr === 'Unknown date') return dayStr || 'Unknown date';
+      try {
+        const d = new Date(`${dayStr}T00:00:00Z`);
+        return d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+      } catch {
+        return dayStr;
+      }
+    }
+    const HACKERBOOK_BASE = 'https://hackerbook.dosaygo.com';
+    function storyUrl(id) { return `${HACKERBOOK_BASE}/index.html?view=item&id=${encodeURIComponent(id)}`; }
+    function hnDiscussionUrl(id) { return `https://news.ycombinator.com/item?id=${encodeURIComponent(id)}`; }
+    function hnFromUrl(host) { return `https://hn.algolia.com/?dateRange=all&page=0&prefix=false&query=${encodeURIComponent(host)}&sort=byDate&type=story`; }
+    function userUrl(by) { return `${HACKERBOOK_BASE}/index.html?view=user&id=${encodeURIComponent(by)}`; }
+    function hostFromUrl(url) {
+      if (!url) return '';
+      try { return new URL(url).host.replace(/^www\./i, ''); } catch { return ''; }
+    }
+    function siteTailHtml(url) {
+      const host = hostFromUrl(url);
+      if (!host) return '';
+      return ` <span class="sitebit comhead">(<a href="${hnFromUrl(host)}" target="_blank" rel="noopener"><span class="sitestr">${esc(host)}</span></a>)</span>`;
+    }
+    const INTERESTING_TITLE_STOP_WORDS = new Set([
+      'the', 'a', 'an', 'and', 'or', 'to', 'of', 'for', 'on', 'in', 'is', 'are',
+      'was', 'were', 'be', 'with', 'from', 'by', 'at', 'that', 'this', 'it', 'its',
+      'ask', 'show', 'tell', 'hn', 'yc', 'ycombinator', '2024', '2025', '2026'
+    ]);
+    const INTERESTING_SIDE_SIM_THRESHOLD = 0.58;
+    const INTERESTING_PAIR_SIM_THRESHOLD = 0.52;
+    const INTERESTING_DUPLICATE_TITLE_THRESHOLD = 0.72;
+    function isDupeLikeTitle(v) {
+      const t = String(v || '').trim().toLowerCase();
+      if (!t) return true;
+      if (t === '[dupe]' || t === 'dupe') return true;
+      if (/^\[\s*dupe\b.*\]$/.test(t)) return true;
+      if (/^\s*dupe\b/.test(t)) return true;
+      return false;
+    }
+    function cleanInterestingTitle(v) {
+      const t = String(v || '').trim();
+      if (!t) return null;
+      if (isDupeLikeTitle(t)) return null;
+      return t;
+    }
+    function resolvedInterestingTitle(primaryTitle, relatedTitle) {
+      const a = cleanInterestingTitle(primaryTitle);
+      if (a) return a;
+      const b = cleanInterestingTitle(relatedTitle);
+      return b || null;
+    }
+    function normalizeTitleLoose(title) {
+      return String(title || '')
+        .toLowerCase()
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    }
+    function titleTokens(title) {
+      const loose = normalizeTitleLoose(title);
+      if (!loose) return [];
+      const parts = loose.split(/\s+/g);
+      const uniq = new Set();
+      for (const p of parts) {
+        if (!p || p.length < 3) continue;
+        if (/^\d+$/.test(p)) continue;
+        if (INTERESTING_TITLE_STOP_WORDS.has(p)) continue;
+        uniq.add(p);
+      }
+      let out = [...uniq];
+      if (!out.length) {
+        out = [...new Set(parts.filter((p) => p && p.length >= 2 && !/^\d+$/.test(p)))];
+      }
+      out.sort();
+      return out;
+    }
+    function jaccardSortedTokens(a, b) {
+      if (!a.length || !b.length) return 0;
+      let i = 0;
+      let j = 0;
+      let inter = 0;
+      while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) {
+          inter += 1;
+          i += 1;
+          j += 1;
+          continue;
+        }
+        if (a[i] < b[j]) i += 1;
+        else j += 1;
+      }
+      const union = a.length + b.length - inter;
+      return union > 0 ? (inter / union) : 0;
+    }
+    function storyPairId(row) {
+      return `${Number(row?.source_story_id || 0)}:${Number(row?.target_story_id || 0)}`;
+    }
+    function aggregateInterestingRows(rows, opts = {}) {
+      const withGroups = Boolean(opts && opts.withGroups);
+      const groups = [];
+      for (const row of (rows || [])) {
+        const sourceResolvedTitle = resolvedInterestingTitle(row?.source_title, row?.target_title);
+        const targetResolvedTitle = resolvedInterestingTitle(row?.target_title, row?.source_title);
+        const sourceTitle = String(sourceResolvedTitle || `[story ${row?.source_story_id || '?'}]`);
+        const targetTitle = String(targetResolvedTitle || `[story ${row?.target_story_id || '?'}]`);
+        const sourceNorm = normalizeTitleLoose(sourceTitle);
+        const targetNorm = normalizeTitleLoose(targetTitle);
+        const sourceTokens = titleTokens(sourceTitle);
+        const targetTokens = titleTokens(targetTitle);
+        const crossTitleSim = (sourceNorm && targetNorm && sourceNorm === targetNorm)
+          ? 1
+          : jaccardSortedTokens(sourceTokens, targetTokens);
+        const rowLooksDuplicate = (sourceNorm && targetNorm && sourceNorm === targetNorm) || (crossTitleSim >= INTERESTING_DUPLICATE_TITLE_THRESHOLD);
+
+        let bestIdx = -1;
+        let bestPairSim = -1;
+        for (let i = 0; i < groups.length; i += 1) {
+          const g = groups[i];
+          const sourceSim = (sourceNorm && sourceNorm === g.sourceNorm)
+            ? 1
+            : jaccardSortedTokens(sourceTokens, g.sourceTokens);
+          const targetSim = (targetNorm && targetNorm === g.targetNorm)
+            ? 1
+            : jaccardSortedTokens(targetTokens, g.targetTokens);
+          const pairSim = (sourceSim + targetSim) / 2;
+          const sameTheme =
+            (sourceSim >= INTERESTING_SIDE_SIM_THRESHOLD && targetSim >= INTERESTING_SIDE_SIM_THRESHOLD) ||
+            (pairSim >= INTERESTING_PAIR_SIM_THRESHOLD);
+          if (sameTheme && pairSim > bestPairSim) {
+            bestPairSim = pairSim;
+            bestIdx = i;
+          }
+        }
+
+        if (bestIdx < 0) {
+          groups.push({
+            sourceNorm,
+            targetNorm,
+            sourceTokens,
+            targetTokens,
+            rep: row,
+            rawRows: [row],
+            repSourceTitle: sourceResolvedTitle,
+            repTargetTitle: targetResolvedTitle,
+            entropyMax: Number(row?.entropy_score || 0),
+            entropySum: Number(row?.entropy_score || 0),
+            evidenceSum: Number(row?.evidence_count || 0),
+            weightedDen: Math.max(1, Number(row?.evidence_count || 1)),
+            noveltyWeighted: Number(row?.novelty || 0) * Math.max(1, Number(row?.evidence_count || 1)),
+            semanticWeighted: Number(row?.semantic_support || 0) * Math.max(1, Number(row?.evidence_count || 1)),
+            lexicalWeighted: Number(row?.lexical_sim || 0) * Math.max(1, Number(row?.evidence_count || 1)),
+            weightWeighted: Number(row?.weight || 0) * Math.max(1, Number(row?.evidence_count || 1)),
+            duplicateWeighted: crossTitleSim * Math.max(1, Number(row?.evidence_count || 1)),
+            duplicateHits: rowLooksDuplicate ? 1 : 0,
+            sourceStoryIds: new Set([Number(row?.source_story_id)]),
+            targetStoryIds: new Set([Number(row?.target_story_id)]),
+            pairIds: new Set([`${Number(row?.source_story_id)}:${Number(row?.target_story_id)}`]),
+            rowCount: 1,
+            sourceMinTime: Number(row?.source_time || 0) || 0,
+            sourceMaxTime: Number(row?.source_time || 0) || 0,
+            targetMinTime: Number(row?.target_time || 0) || 0,
+            targetMaxTime: Number(row?.target_time || 0) || 0
+          });
+          continue;
+        }
+
+        const g = groups[bestIdx];
+        const entropy = Number(row?.entropy_score || 0);
+        const evidence = Math.max(1, Number(row?.evidence_count || 1));
+        g.rowCount += 1;
+        g.entropySum += entropy;
+        g.evidenceSum += Number(row?.evidence_count || 0);
+        g.weightedDen += evidence;
+        g.noveltyWeighted += Number(row?.novelty || 0) * evidence;
+        g.semanticWeighted += Number(row?.semantic_support || 0) * evidence;
+        g.lexicalWeighted += Number(row?.lexical_sim || 0) * evidence;
+        g.weightWeighted += Number(row?.weight || 0) * evidence;
+        g.duplicateWeighted += crossTitleSim * evidence;
+        g.duplicateHits += rowLooksDuplicate ? 1 : 0;
+        g.rawRows.push(row);
+        g.sourceStoryIds.add(Number(row?.source_story_id));
+        g.targetStoryIds.add(Number(row?.target_story_id));
+        g.pairIds.add(`${Number(row?.source_story_id)}:${Number(row?.target_story_id)}`);
+        const sourceTime = Number(row?.source_time || 0) || 0;
+        const targetTime = Number(row?.target_time || 0) || 0;
+        if (!g.sourceMinTime || (sourceTime && sourceTime < g.sourceMinTime)) g.sourceMinTime = sourceTime;
+        if (sourceTime > g.sourceMaxTime) g.sourceMaxTime = sourceTime;
+        if (!g.targetMinTime || (targetTime && targetTime < g.targetMinTime)) g.targetMinTime = targetTime;
+        if (targetTime > g.targetMaxTime) g.targetMaxTime = targetTime;
+        if (entropy > g.entropyMax) {
+          g.entropyMax = entropy;
+          g.rep = row;
+          g.repSourceTitle = sourceResolvedTitle;
+          g.repTargetTitle = targetResolvedTitle;
+          g.sourceNorm = sourceNorm || g.sourceNorm;
+          g.targetNorm = targetNorm || g.targetNorm;
+          g.sourceTokens = sourceTokens.length ? sourceTokens : g.sourceTokens;
+          g.targetTokens = targetTokens.length ? targetTokens : g.targetTokens;
+        }
+      }
+
+      const outRows = groups
+        .map((g) => {
+          const pairCount = g.pairIds.size;
+          const titleOverlap = g.duplicateWeighted / Math.max(1, g.weightedDen);
+          const duplicateLike = g.duplicateHits > 0 || (titleOverlap >= INTERESTING_DUPLICATE_TITLE_THRESHOLD);
+          const baseScore =
+            g.entropyMax +
+            0.22 * Math.log1p(pairCount) +
+            0.12 * Math.log1p(Math.max(0, g.evidenceSum));
+          const duplicatePenalty =
+            (1.8 * Math.pow(Math.max(0, Math.min(1, titleOverlap)), 1.4)) +
+            (duplicateLike ? 1.2 : 0);
+          const score = baseScore - duplicatePenalty;
+          return {
+            source_story_id: Number(g.rep?.source_story_id || 0),
+            target_story_id: Number(g.rep?.target_story_id || 0),
+            source_title: g.repSourceTitle || null,
+            target_title: g.repTargetTitle || null,
+            source_by: g.rep?.source_by || null,
+            target_by: g.rep?.target_by || null,
+            source_time: Number(g.rep?.source_time || 0) || null,
+            target_time: Number(g.rep?.target_time || 0) || null,
+            source_time_min: g.sourceMinTime || null,
+            source_time_max: g.sourceMaxTime || null,
+            target_time_min: g.targetMinTime || null,
+            target_time_max: g.targetMaxTime || null,
+            source_story_count: g.sourceStoryIds.size,
+            target_story_count: g.targetStoryIds.size,
+            story_pair_count: pairCount,
+            raw_edge_count: g.rowCount,
+            evidence_count: g.evidenceSum,
+            rep_pair_id: storyPairId(g.rep),
+            entropy_score: score,
+            entropy_base: baseScore,
+            entropy_max: g.entropyMax,
+            novelty: g.noveltyWeighted / Math.max(1, g.weightedDen),
+            semantic_support: g.semanticWeighted / Math.max(1, g.weightedDen),
+            lexical_sim: g.lexicalWeighted / Math.max(1, g.weightedDen),
+            weight: g.weightWeighted / Math.max(1, g.weightedDen),
+            title_overlap: titleOverlap,
+            duplicate_like: duplicateLike ? 1 : 0
+          };
+        })
+        .sort((a, b) =>
+          (Number(a.duplicate_like || 0) - Number(b.duplicate_like || 0)) ||
+          (Number(b.entropy_score || 0) - Number(a.entropy_score || 0)) ||
+          (Number(b.entropy_max || 0) - Number(a.entropy_max || 0)) ||
+          (Number(b.story_pair_count || 0) - Number(a.story_pair_count || 0)) ||
+          (Number(b.evidence_count || 0) - Number(a.evidence_count || 0))
+        );
+      if (!withGroups) return outRows;
+      const groupByRepPair = new Map();
+      for (const g of groups) {
+        groupByRepPair.set(storyPairId(g.rep), g);
+      }
+      return { rows: outRows, groupByRepPair };
+    }
+    function normalizeSort(v) {
+      const s = String(v || 'interesting').toLowerCase();
+      if (s === 'linked_clusters') return 'linked';
+      if (s === 'comments' || s === 'points' || s === 'discussions' || s === 'linked' || s === 'raw_linked' || s === 'ranked' || s === 'custom_ranked' || s === 'pure_recent' || s === 'interesting') return s;
+      return 'interesting';
+    }
+    function highlightSortLink(sort) {
+      document.querySelectorAll('.sort-link').forEach(el => {
+        el.classList.toggle('active', el.dataset.sort === sort);
+      });
+    }
+    function rankedScore(row) {
+      const backlinks = Math.max(0, Number(row?.incoming_link_count || 0));
+      const discussions = Math.max(0, Number(row?.member_count || 0));
+      const comments = Math.max(0, Number(row?.comment_count || 0));
+      const points = Math.max(0, Number(row?.story_points_sum || 0));
+      return (
+        0.50 * Math.log1p(backlinks) +
+        0.25 * Math.log1p(discussions) +
+        0.15 * Math.log1p(comments) +
+        0.10 * Math.log1p(points)
+      );
+    }
+    function validateCustomRankExpression(rawExpr) {
+      const expr = String(rawExpr || '').trim();
+      if (!expr) throw new Error('Expression cannot be empty.');
+      if (expr.length > 400) throw new Error('Expression too long (max 400 chars).');
+      if (/[;"'`[\]{}\\]/.test(expr)) throw new Error('Quotes, brackets, braces, semicolons, and backslashes are not allowed.');
+      if (!/^[0-9+\-*/%().,?:<>=!&|\sA-Za-z_]+$/.test(expr)) throw new Error('Unsupported character in expression.');
+      if (/(^|[^!<>=])=($|[^=])/.test(expr)) throw new Error('Assignment is not allowed; use comparisons only.');
+      if (/\b[A-Za-z_]\w*\s*\./.test(expr)) throw new Error('Property access is not allowed.');
+      if (/\b(?:window|document|globalThis|global|process|Function|eval|import|fetch|XMLHttpRequest|localStorage|sessionStorage|constructor|prototype|__proto__|this|new|class|while|for|do|if|switch|try|catch|throw|await|async|return)\b/.test(expr)) {
+        throw new Error('Only pure math expressions are allowed.');
+      }
+      const ids = expr.match(/\b[A-Za-z_]\w*\b/g) || [];
+      for (const id of ids) {
+        if (!CUSTOM_RANK_ALLOWED_IDS.has(id)) {
+          throw new Error(`Unknown identifier: ${id}`);
+        }
+      }
+      return expr;
+    }
+    function compileCustomRankExpression(rawExpr) {
+      const expr = validateCustomRankExpression(rawExpr);
+      const fn = new Function('row', `
+        "use strict";
+        const backlinks = Math.max(0, Number(row?.incoming_link_count || 0));
+        const discussions = Math.max(0, Number(row?.member_count || 0));
+        const comments = Math.max(0, Number(row?.comment_count || 0));
+        const points = Math.max(0, Number(row?.story_points_sum || 0));
+        const time = Math.max(0, Number(row?.time || 0));
+        const rank = Math.max(0, Number(row?.rank || 0));
+        const ln = Math.log;
+        const log = Math.log;
+        const log1p = Math.log1p;
+        const sqrt = Math.sqrt;
+        const pow = Math.pow;
+        const min = Math.min;
+        const max = Math.max;
+        const abs = Math.abs;
+        const round = Math.round;
+        const floor = Math.floor;
+        const ceil = Math.ceil;
+        const exp = Math.exp;
+        const PI = Math.PI;
+        const E = Math.E;
+        const out = (${expr});
+        return Number.isFinite(out) ? Number(out) : -Infinity;
+      `);
+      const testOut = fn({ incoming_link_count: 10, member_count: 5, comment_count: 200, story_points_sum: 500, time: 1700000000, rank: 100 });
+      if (!Number.isFinite(testOut)) throw new Error('Expression result must be a finite number.');
+      return { expr, fn };
+    }
+    function applyCustomRankExpression(rawExpr, persist = true) {
+      const compiled = compileCustomRankExpression(rawExpr);
+      customRankExpr = compiled.expr;
+      customRankFn = compiled.fn;
+      topSortCache.delete('custom_ranked');
+      if (persist) {
+        try { localStorage.setItem(CUSTOM_RANK_STORAGE_KEY, customRankExpr); } catch {}
+      }
+      return true;
+    }
+    function loadSavedCustomRankExpression() {
+      let loaded = false;
+      try {
+        const saved = localStorage.getItem(CUSTOM_RANK_STORAGE_KEY);
+        if (saved && applyCustomRankExpression(saved, false)) loaded = true;
+      } catch (err) {
+        console.warn('Failed loading custom rank expression:', err);
+        try { localStorage.removeItem(CUSTOM_RANK_STORAGE_KEY); } catch {}
+      }
+      if (!loaded) {
+        try {
+          applyCustomRankExpression(DEFAULT_CUSTOM_RANK_EXPR, false);
+          loaded = true;
+        } catch (err) {
+          console.warn('Failed loading default custom rank expression:', err);
+        }
+      }
+      return loaded;
+    }
+    function promptForCustomRankExpression() {
+      const help = [
+        'Custom rank expression (JavaScript math expression).',
+        'Variables: backlinks, discussions, comments, points, time, rank',
+        'Functions: ln, log, log1p, sqrt, pow, min, max, abs, round, floor, ceil, exp',
+        'Constants: PI, E',
+        'Allowed operators: + - * / % () < <= > >= == != && || ? :',
+        '',
+        'Example:',
+        '0.50*log1p(backlinks)+0.25*log1p(discussions)+0.15*log1p(comments)+0.10*log1p(points)'
+      ].join('\n');
+      const seed = customRankExpr || DEFAULT_CUSTOM_RANK_EXPR;
+      const input = window.prompt(help, seed);
+      if (input == null) return false;
+      try {
+        return applyCustomRankExpression(input, true);
+      } catch (err) {
+        window.alert(`Invalid custom rank expression.\n\n${err && err.message ? err.message : String(err)}`);
+        return false;
+      }
+    }
+    function customRankScore(row) {
+      if (!customRankFn) return rankedScore(row);
+      try {
+        const out = customRankFn(row);
+        return Number.isFinite(out) ? out : -Infinity;
+      } catch {
+        return rankedScore(row);
+      }
+    }
+    function parseYearsParam(v) {
+      const set = new Set();
+      const raw = String(v || '').trim();
+      if (!raw) return set;
+      for (const part of raw.split(',')) {
+        const y = Number(part.trim());
+        if (Number.isFinite(y) && y >= 2006 && y <= 2100) set.add(y);
+      }
+      return set;
+    }
+    function yearsParamFromSet(yearSet) {
+      if (!yearSet || !yearSet.size) return '';
+      return [...yearSet].sort((a, b) => b - a).join(',');
+    }
+    function yearsFromRow(r) {
+      const out = new Set();
+      const raw = String((r && r.years_csv) || '').trim();
+      if (raw) {
+        for (const part of raw.split(',')) {
+          const y = Number(part.trim());
+          if (Number.isFinite(y) && y >= 2006 && y <= 2100) out.add(y);
+        }
+      }
+      if (!out.size) {
+        const y = yearFromTs(r && r.time);
+        if (y != null) out.add(y);
+      }
+      return out;
+    }
+    function buildYearOptions(rows, backlinksRows, selectedYears) {
+      if (!topYearsEl) return;
+      const years = new Set();
+      for (const r of (rows || [])) {
+        for (const y of yearsFromRow(r)) years.add(y);
+      }
+      for (const r of (backlinksRows || [])) {
+        const y = yearFromTs(r && r.time);
+        if (y != null) years.add(y);
+      }
+      const sorted = [...years].sort((a, b) => b - a);
+      topYearsEl.innerHTML = '';
+      for (const y of sorted) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        if (selectedYears && selectedYears.has(y)) opt.selected = true;
+        topYearsEl.appendChild(opt);
+      }
+    }
+    function selectedYearsFromControl() {
+      const set = new Set();
+      if (!topYearsEl) return set;
+      for (const opt of topYearsEl.selectedOptions || []) {
+        const y = Number(opt.value);
+        if (Number.isFinite(y)) set.add(y);
+      }
+      return set;
+    }
+    function setYearsMenuOpen(open) {
+      if (!topYearsEl) return;
+      if (open) {
+        const n = Math.max(4, Math.min(14, topYearsEl.options.length || 4));
+        topYearsEl.size = n;
+        topYearsEl.classList.add('expanded');
+      } else {
+        topYearsEl.size = 1;
+        topYearsEl.classList.remove('expanded');
+      }
+    }
+    function applyYearFilter(rows, yearSet) {
+      if (!yearSet || yearSet.size === 0) return rows;
+      return rows.filter((r) => {
+        const ys = yearsFromRow(r);
+        for (const y of ys) {
+          if (yearSet.has(y)) return true;
+        }
+        return false;
+      });
+    }
+    function sortTopRows(rows, sortKey) {
+      const sort = normalizeSort(sortKey);
+      if (topSortCache.has(sort)) return topSortCache.get(sort);
+      const out = rows.slice();
+      if (sort === 'comments') {
+        out.sort((a, b) =>
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'points') {
+        out.sort((a, b) =>
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.score || 0) - Number(a.score || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'discussions') {
+        out.sort((a, b) =>
+          (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'linked') {
+        out.sort((a, b) =>
+          (Number(b.incoming_link_count || 0) - Number(a.incoming_link_count || 0)) ||
+          (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'ranked') {
+        out.sort((a, b) =>
+          (rankedScore(b) - rankedScore(a)) ||
+          (Number(b.incoming_link_count || 0) - Number(a.incoming_link_count || 0)) ||
+          (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'custom_ranked') {
+        const scores = new Map();
+        for (const r of out) scores.set(r, customRankScore(r));
+        out.sort((a, b) =>
+          ((scores.get(b) - scores.get(a)) || 0) ||
+          (Number(b.incoming_link_count || 0) - Number(a.incoming_link_count || 0)) ||
+          (Number(b.member_count || 0) - Number(a.member_count || 0)) ||
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else if (sort === 'pure_recent') {
+        out.sort((a, b) =>
+          (dayBucket(b.time) - dayBucket(a.time)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      } else {
+        out.sort((a, b) =>
+          (Number(b.comment_count || 0) - Number(a.comment_count || 0)) ||
+          (Number(b.story_points_sum || 0) - Number(a.story_points_sum || 0)) ||
+          (Number(b.time || 0) - Number(a.time || 0)) ||
+          (Number(a.rank || 0) - Number(b.rank || 0))
+        );
+      }
+      topSortCache.set(sort, out);
+      return out;
+    }
+
+    async function fetchBytes(url) {
+      const r = await fetch(url, { cache: 'no-cache' });
+      if (!r.ok) throw new Error(`Fetch failed ${r.status}: ${url}`);
+      return new Uint8Array(await r.arrayBuffer());
+    }
+
+    async function maybeGunzip(u8) {
+      if (u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b) {
+        if (typeof DecompressionStream !== 'undefined') {
+          const ds = new DecompressionStream('gzip');
+          const stream = new Response(u8).body.pipeThrough(ds);
+          const buf = await new Response(stream).arrayBuffer();
+          return new Uint8Array(buf);
+        }
+        throw new Error('This browser does not support DecompressionStream.');
+      }
+      return u8;
+    }
+
+    async function fetchJsonMaybeGzip(url) {
+      const u8 = await fetchBytes(url);
+      const raw = await maybeGunzip(u8);
+      return JSON.parse(new TextDecoder('utf-8').decode(raw));
+    }
+
+    function sqlAll(db, sql, bind = []) {
+      return db.exec({ sql, bind, rowMode: 'object', returnValue: 'resultRows' }) || [];
+    }
+    function sqlOne(db, sql, bind = []) {
+      const rows = sqlAll(db, sql, bind);
+      return rows[0] || null;
+    }
+
+    function shardRecForRank(rank) {
+      const x = Number(rank);
+      for (const s of manifest.shards || []) {
+        if (x >= Number(s.rank_lo) && x <= Number(s.rank_hi)) return s;
+      }
+      return null;
+    }
+
+    async function loadShardBySid(sid) {
+      if (shardCache.has(sid)) return shardCache.get(sid);
+      const rec = (manifest.shards || []).find((s) => Number(s.sid) === Number(sid));
+      if (!rec) throw new Error(`Missing shard sid=${sid}`);
+      const u8 = await fetchBytes(PATHS.shards + rec.file);
+      const raw = await maybeGunzip(u8);
+      const p = sqlite3.wasm.allocFromTypedArray(raw);
+      const db = new sqlite3.oo1.DB();
+      sqlite3.capi.sqlite3_deserialize(
+        db.pointer,
+        'main',
+        p,
+        raw.byteLength,
+        raw.byteLength,
+        sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE
+      );
+      shardCache.set(sid, db);
+      return db;
+    }
+
+    function renderPager(baseParams, page, hasPrev, hasNext) {
+      const prev = hasPrev
+        ? `<a href="?${new URLSearchParams({ ...baseParams, p: String(page - 1) }).toString()}">prev</a>`
+        : 'prev';
+      const next = hasNext
+        ? `<a href="?${new URLSearchParams({ ...baseParams, p: String(page + 1) }).toString()}">next</a>`
+        : 'next';
+      return `<div class="pager">${prev} | page ${page} | ${next}</div>`;
+    }
+    function renderViewExplainer(viewKey, yearSet = new Set()) {
+      let txt = '';
+      switch (String(viewKey || '')) {
+        case 'interesting':
+          txt = 'This is interesting story pairings ranked by semantic surprise and HN backlink evidence, with near-duplicate title pairs demoted.';
+          break;
+        case 'interesting_evidence':
+          txt = 'This is the evidence timeline for one pairing, showing all merged source-target links and their scores.';
+          break;
+        case 'raw_linked':
+          txt = 'This is stories ranked by inbound HN backlinks found in comments.';
+          break;
+        case 'comments':
+          txt = 'This is topic clusters ranked by total comments across linked discussions.';
+          break;
+        case 'points':
+          txt = 'This is topic clusters ranked by total story points across linked discussions.';
+          break;
+        case 'discussions':
+          txt = 'This is topic clusters ranked by number of linked discussions.';
+          break;
+        case 'linked':
+          txt = 'This is topic clusters ranked by total incoming backlinks in the HN cross-link graph.';
+          break;
+        case 'ranked':
+          txt = 'This is topic clusters ranked by blended score (backlinks, discussions, comments, points).';
+          break;
+        case 'custom_ranked':
+          txt = 'This is topic clusters ranked by your custom score expression.';
+          break;
+        case 'pure_recent':
+          txt = 'This is topic clusters ranked by most recent activity day.';
+          break;
+        case 'cluster':
+          txt = 'This is a per-cluster timeline view, grouped by day then sorted by points within each day.';
+          break;
+        default:
+          txt = 'This is HN related results ranked by the selected mode.';
+          break;
+      }
+      if (yearSet.size > 0) {
+        txt += ` Filtered to years: ${[...yearSet].sort((a, b) => b - a).join(', ')}.`;
+      }
+      return `<div class="view-explainer">${esc(txt)}</div>`;
+    }
+    function filteredInterestingRawRows(yearSet = new Set()) {
+      const rawRows = Array.isArray(topIndex?.surprising) ? topIndex.surprising : [];
+      if (!yearSet.size) return rawRows;
+      return rawRows.filter((r) => {
+        const sourceYear = yearFromTs(r?.source_time);
+        const targetYear = yearFromTs(r?.target_time);
+        return (sourceYear != null && yearSet.has(sourceYear)) || (targetYear != null && yearSet.has(targetYear));
+      });
+    }
+
+    async function renderBacklinks(page, yearSet = new Set()) {
+      const yearsParam = yearsParamFromSet(yearSet);
+      const rawBacklinks = topIndex.backlinks || [];
+      const backlinks = yearSet.size > 0
+        ? rawBacklinks.filter((r) => {
+            const y = yearFromTs(r && r.time);
+            return y != null && yearSet.has(y);
+          })
+        : rawBacklinks;
+      const total = backlinks.length;
+      const offset = (page - 1) * PAGE_SIZE;
+      const pageRows = backlinks.slice(offset, offset + PAGE_SIZE);
+      const hasPrev = page > 1;
+      const hasNext = offset + PAGE_SIZE < total;
+
+      let html = renderViewExplainer('raw_linked', yearSet);
+      for (let i = 0; i < pageRows.length; i += 1) {
+        const r = pageRows[i];
+        const rank = offset + i + 1;
+        const hnHref = hnDiscussionUrl(r.story_id);
+        const siteTail = siteTailHtml(r.url);
+        html += `
+          <div class="row">
+            <div class="title"><span class="ranknum">${rank}.</span> <span class="titleline"><a href="${hnHref}" target="_blank" rel="noopener">${esc(r.title || '[untitled]')}</a>${siteTail}</span></div>
+            <div class="sub">
+              by ${r.by ? `<a href="${userUrl(r.by)}">${esc(r.by)}</a>` : '[unknown]'}
+              | ${fmtNum(r.score || 0)} points
+              | ${fmtTime(r.time)}
+              | <a class="sublink" href="${hnHref}" target="_blank" rel="noopener">${fmtNum(r.incoming_link_count)} backlinks</a>
+            </div>
+          </div>
+        `;
+      }
+      html += renderPager(yearsParam ? { sort: 'raw_linked', years: yearsParam } : { sort: 'raw_linked' }, page, hasPrev, hasNext);
+      contentEl.innerHTML = html;
+      highlightSortLink('raw_linked');
+      if (topYearsEl) {
+        for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
+      }
+      if (footerMetaEl) footerMetaEl.textContent = `Stories with backlinks: ${fmtNum(total)}.${yearSet.size > 0 ? ` Filtered by ${[...yearSet].sort((a, b) => b - a).join(', ')}.` : ''}`;
+    }
+
+    async function renderInteresting(page, yearSet = new Set()) {
+      const yearsParam = yearsParamFromSet(yearSet);
+      const filteredRows = filteredInterestingRawRows(yearSet);
+      const rows = aggregateInterestingRows(filteredRows);
+      const total = rows.length;
+      const offset = (page - 1) * PAGE_SIZE;
+      const pageRows = rows.slice(offset, offset + PAGE_SIZE);
+      const hasPrev = page > 1;
+      const hasNext = offset + PAGE_SIZE < total;
+
+      let html = renderViewExplainer('interesting', yearSet);
+      if (!pageRows.length) {
+        html += `<div class="row"><div class="sub">No interesting links matched this filter.</div></div>`;
+      }
+      for (let i = 0; i < pageRows.length; i += 1) {
+        const r = pageRows[i];
+        const rank = offset + i + 1;
+        const sourceHref = hnDiscussionUrl(r.source_story_id);
+        const targetHref = hnDiscussionUrl(r.target_story_id);
+        const pairQs = new URLSearchParams({ sort: 'interesting', pair: String(r.rep_pair_id || '') });
+        if (yearsParam) pairQs.set('years', yearsParam);
+        const pairHref = `?${pairQs.toString()}`;
+        html += `
+          <div class="row">
+            <div class="title">
+              <span class="ranknum">${rank}.</span>
+              <span class="titleline">
+                <a href="${sourceHref}" target="_blank" rel="noopener">${esc(r.source_title || `[story ${r.source_story_id}]`)}</a>
+                &nbsp;→&nbsp;
+                <a href="${targetHref}" target="_blank" rel="noopener">${esc(r.target_title || `[story ${r.target_story_id}]`)}</a>
+              </span>
+            </div>
+            <div class="sub">
+              interesting ${Number(r.entropy_score || 0).toFixed(3)}
+              | max entropy ${Number(r.entropy_max || 0).toFixed(3)}
+              | novelty ${Number(r.novelty || 0).toFixed(3)}
+              | semantic ${Number(r.semantic_support || 0).toFixed(3)}
+              | lexical ${Number(r.lexical_sim || 0).toFixed(3)}
+              | title overlap ${Number(r.title_overlap || 0).toFixed(3)}
+              | weight ${Number(r.weight || 0).toFixed(3)}
+              | <a class="sublink" href="${pairHref}">evidence ${fmtNum(r.evidence_count || 0)}</a>
+              | <a class="sublink" href="${pairHref}">merged ${fmtNum(r.story_pair_count || 0)} pairs</a>
+            </div>
+            <div class="sub">
+              source range ${fmtTime(r.source_time_min)} → ${fmtTime(r.source_time_max)}
+              | target range ${fmtTime(r.target_time_min)} → ${fmtTime(r.target_time_max)}
+              | source stories ${fmtNum(r.source_story_count || 0)}
+              | target stories ${fmtNum(r.target_story_count || 0)}
+            </div>
+          </div>
+        `;
+      }
+      html += renderPager(yearsParam ? { sort: 'interesting', years: yearsParam } : { sort: 'interesting' }, page, hasPrev, hasNext);
+      contentEl.innerHTML = html;
+      highlightSortLink('interesting');
+      if (topYearsEl) {
+        for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
+      }
+      if (footerMetaEl) footerMetaEl.textContent = `Interesting themes: ${fmtNum(total)}.${yearSet.size > 0 ? ` Filtered by ${[...yearSet].sort((a, b) => b - a).join(', ')}.` : ''}`;
+    }
+
+    async function renderInterestingEvidence(pairId, page, yearSet = new Set()) {
+      const yearsParam = yearsParamFromSet(yearSet);
+      const backQs = new URLSearchParams({ sort: 'interesting' });
+      if (yearsParam) backQs.set('years', yearsParam);
+      const backHref = `/?${backQs.toString()}`;
+      const filteredRows = filteredInterestingRawRows(yearSet);
+      const aggregated = aggregateInterestingRows(filteredRows, { withGroups: true });
+      const summary = (aggregated.rows || []).find((r) => String(r.rep_pair_id || '') === String(pairId || ''));
+      const group = aggregated.groupByRepPair.get(String(pairId || ''));
+      if (!summary || !group) {
+        contentEl.innerHTML = `
+          <div class="row">
+            <div class="title"><a href="${backHref}">← back to interesting</a></div>
+            <div class="hr"></div>
+            <div class="sub">Evidence not found for pairing: <span class="mono">${esc(pairId || '')}</span></div>
+          </div>
+        `;
+        highlightSortLink('interesting');
+        if (footerMetaEl) footerMetaEl.textContent = 'Interesting evidence not found.';
+        return;
+      }
+
+      const evidenceRows = (group.rawRows || []).slice().sort((a, b) =>
+        (Math.max(Number(b?.source_time || 0), Number(b?.target_time || 0)) - Math.max(Number(a?.source_time || 0), Number(a?.target_time || 0))) ||
+        (Number(b?.entropy_score || 0) - Number(a?.entropy_score || 0)) ||
+        (Number(b?.weight || 0) - Number(a?.weight || 0))
+      );
+      const total = evidenceRows.length;
+      const offset = (page - 1) * PAGE_SIZE;
+      const pageRows = evidenceRows.slice(offset, offset + PAGE_SIZE);
+      const hasPrev = page > 1;
+      const hasNext = offset + PAGE_SIZE < total;
+
+      let html = `
+        ${renderViewExplainer('interesting_evidence', yearSet)}
+        <div class="row">
+          <div class="title"><a href="${backHref}">← back to interesting</a></div>
+          <div class="hr"></div>
+          <div class="title"><b>${esc(summary.source_title || `[story ${summary.source_story_id}]`)}</b>&nbsp;→&nbsp;<b>${esc(summary.target_title || `[story ${summary.target_story_id}]`)}</b></div>
+          <div class="sub">
+            interesting ${Number(summary.entropy_score || 0).toFixed(3)}
+            | max entropy ${Number(summary.entropy_max || 0).toFixed(3)}
+            | novelty ${Number(summary.novelty || 0).toFixed(3)}
+            | semantic ${Number(summary.semantic_support || 0).toFixed(3)}
+            | lexical ${Number(summary.lexical_sim || 0).toFixed(3)}
+            | title overlap ${Number(summary.title_overlap || 0).toFixed(3)}
+            | weight ${Number(summary.weight || 0).toFixed(3)}
+          </div>
+          <div class="sub">
+            source range ${fmtTime(summary.source_time_min)} → ${fmtTime(summary.source_time_max)}
+            | target range ${fmtTime(summary.target_time_min)} → ${fmtTime(summary.target_time_max)}
+            | source stories ${fmtNum(summary.source_story_count || 0)}
+            | target stories ${fmtNum(summary.target_story_count || 0)}
+            | evidence ${fmtNum(summary.evidence_count || 0)}
+            | merged ${fmtNum(summary.story_pair_count || 0)} pairs
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="hint">Evidence timeline: newest combined source/target date first.${yearSet.size > 0 ? ' Year filter active.' : ''}</div>
+        <div class="timeline">
+      `;
+      let openDay = null;
+      for (let i = 0; i < pageRows.length; i += 1) {
+        const row = pageRows[i];
+        const rank = offset + i + 1;
+        const sourceTs = Number(row?.source_time || 0) || 0;
+        const targetTs = Number(row?.target_time || 0) || 0;
+        const eventTs = Math.max(sourceTs, targetTs);
+        const dKey = dayKey(eventTs);
+        if (openDay !== dKey) {
+          if (openDay !== null) html += `</div></div>`;
+          openDay = dKey;
+          html += `
+            <div class="timeline-day">
+              <div class="timeline-day-label">${esc(fmtDayLabel(dKey))}</div>
+              <div class="timeline-items">
+          `;
+        }
+        const sourceTitle = resolvedInterestingTitle(row?.source_title, row?.target_title) || `[story ${row?.source_story_id || '?'}]`;
+        const targetTitle = resolvedInterestingTitle(row?.target_title, row?.source_title) || `[story ${row?.target_story_id || '?'}]`;
+        html += `
+          <div class="timeline-item">
+            <div class="title">
+              <span class="num">${rank}.</span>
+              <span class="titleline">
+                <a href="${hnDiscussionUrl(row?.source_story_id)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>
+                &nbsp;→&nbsp;
+                <a href="${hnDiscussionUrl(row?.target_story_id)}" target="_blank" rel="noopener">${esc(targetTitle)}</a>
+              </span>
+            </div>
+            <div class="sub">
+              source ${fmtTime(sourceTs)} by ${row?.source_by ? `<a href="${userUrl(row.source_by)}">${esc(row.source_by)}</a>` : '[unknown]'}
+              | target ${fmtTime(targetTs)} by ${row?.target_by ? `<a href="${userUrl(row.target_by)}">${esc(row.target_by)}</a>` : '[unknown]'}
+            </div>
+            <div class="sub">
+              entropy ${Number(row?.entropy_score || 0).toFixed(3)}
+              | novelty ${Number(row?.novelty || 0).toFixed(3)}
+              | semantic ${Number(row?.semantic_support || 0).toFixed(3)}
+              | lexical ${Number(row?.lexical_sim || 0).toFixed(3)}
+              | weight ${Number(row?.weight || 0).toFixed(3)}
+              | evidence ${fmtNum(row?.evidence_count || 0)}
+              | <a href="${storyUrl(row?.source_story_id)}">source hackerbook</a>
+              | <a href="${storyUrl(row?.target_story_id)}">target hackerbook</a>
+            </div>
+          </div>
+        `;
+      }
+      if (openDay !== null) html += `</div></div>`;
+      html += `</div>`;
+      const pagerParams = yearsParam
+        ? { sort: 'interesting', pair: String(pairId || ''), years: yearsParam }
+        : { sort: 'interesting', pair: String(pairId || '') };
+      html += renderPager(pagerParams, page, hasPrev, hasNext);
+      contentEl.innerHTML = html;
+      highlightSortLink('interesting');
+      if (topYearsEl) {
+        for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
+      }
+      if (footerMetaEl) footerMetaEl.textContent = `Interesting evidence rows: ${fmtNum(total)}.${yearSet.size > 0 ? ` Filtered by ${[...yearSet].sort((a, b) => b - a).join(', ')}.` : ''}`;
+    }
+
+    async function renderTopList(page, sortKey, yearSet) {
+      const sort = normalizeSort(sortKey);
+      if (sort === 'raw_linked') {
+        return renderBacklinks(page, yearSet);
+      }
+      if (sort === 'interesting') {
+        return renderInteresting(page, yearSet);
+      }
+      const rows = applyYearFilter(sortTopRows(topIndex.rows || [], sort), yearSet);
+      const total = rows.length;
+      const offset = (page - 1) * PAGE_SIZE;
+      const pageRows = rows.slice(offset, offset + PAGE_SIZE);
+      const hasPrev = page > 1;
+      const hasNext = offset + PAGE_SIZE < total;
+      const yearsParam = yearsParamFromSet(yearSet);
+
+      // If year filter active, load best representative from each cluster for those years.
+      let yearReps = new Map(); // component_id -> { title, by, time, score, url, story_id, memberCount }
+      if (yearSet.size > 0 && pageRows.length > 0) {
+        void 0 // statusEl.textContent = `Loading year-filtered representatives...`;
+        const yearsArr = [...yearSet];
+        const yearPlaceholders = yearsArr.map(() => '?').join(',');
+
+        // Group by shard.
+        const cidsByShard = new Map();
+        for (const r of pageRows) {
+          const shardRec = shardRecForRank(r.rank);
+          if (!shardRec) continue;
+          if (!cidsByShard.has(shardRec.sid)) cidsByShard.set(shardRec.sid, []);
+          cidsByShard.get(shardRec.sid).push(r.component_id);
+        }
+
+        const shardIds = [...cidsByShard.keys()];
+        let loadedShards = 0;
+        for (const [sid, cids] of cidsByShard.entries()) {
+          try {
+            if (loadingStatusEl) loadingStatusEl.textContent = `shard ${++loadedShards}/${shardIds.length}`;
+            const db = await loadShardBySid(sid);
+            for (const cid of cids) {
+              // Find best story from selected years (highest score, most recent).
+              const yearMembers = sqlAll(db, `
+                SELECT story_id, title, by, time, score, url
+                FROM component_members
+                WHERE component_id = ?
+                  AND CAST(strftime('%Y', COALESCE(time, 0), 'unixepoch') AS INTEGER) IN (${yearPlaceholders})
+                ORDER BY COALESCE(score, 0) DESC, COALESCE(time, 0) DESC
+                LIMIT 1
+              `, [cid, ...yearsArr]);
+              if (yearMembers.length > 0) {
+                const m = yearMembers[0];
+                // Also count members in those years.
+                const countRow = sqlOne(db, `
+                  SELECT COUNT(*) as cnt
+                  FROM component_members
+                  WHERE component_id = ?
+                    AND CAST(strftime('%Y', COALESCE(time, 0), 'unixepoch') AS INTEGER) IN (${yearPlaceholders})
+                `, [cid, ...yearsArr]);
+                yearReps.set(cid, {
+                  story_id: m.story_id,
+                  title: m.title,
+                  by: m.by,
+                  time: m.time,
+                  score: m.score,
+                  url: m.url,
+                  memberCount: countRow?.cnt || 1
+                });
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed to load year reps from shard ${sid}:`, err);
+          }
+        }
+        if (loadingStatusEl) loadingStatusEl.textContent = '';
+      }
+
+      let html = renderViewExplainer(sort, yearSet);
+      for (let i = 0; i < pageRows.length; i += 1) {
+        const r = pageRows[i];
+        const rank = offset + i + 1;
+        const clusterParams = new URLSearchParams({ cid: String(r.component_id), sort });
+        if (yearsParam) clusterParams.set('years', yearsParam);
+        const clusterHref = `?${clusterParams.toString()}`;
+
+        // Use year-filtered representative if available.
+        const rep = yearReps.get(r.component_id);
+        const displayTitle = rep ? rep.title : r.title;
+        const displayBy = rep ? rep.by : r.by;
+        const displayTime = rep ? rep.time : r.time;
+        const displayScore = rep ? rep.score : r.score;
+        const displayUrl = rep ? rep.url : r.root_url;
+        const displayStoryId = rep ? rep.story_id : r.root_story_id;
+        const displayMemberCount = rep ? rep.memberCount : r.member_count;
+
+        const clusterPoints = Math.round(Number(r.story_points_sum != null ? r.story_points_sum : (displayScore || 0)));
+        const discussionLabel = `${fmtNum(displayMemberCount)} discussions (${fmtNum(r.comment_count)} comments)`;
+        const statLabel = (sort === 'linked' || sort === 'ranked' || sort === 'custom_ranked')
+          ? `${fmtNum(r.incoming_link_count)} backlinks, ${discussionLabel}`
+          : discussionLabel;
+        const siteTail = siteTailHtml(displayUrl);
+        html += `
+          <div class="row">
+            <div class="title"><span class="ranknum">${rank}.</span> <span class="titleline"><a href="${clusterHref}">${esc(displayTitle || '[untitled]')}</a>${siteTail}</span></div>
+            <div class="sub">
+              by ${displayBy ? `<a href="${userUrl(displayBy)}">${esc(displayBy)}</a>` : '[unknown]'}
+              ${(sort === 'linked' || sort === 'ranked' || sort === 'custom_ranked') ? '' : `| ${fmtNum(clusterPoints)} points`}
+              | ${fmtTime(displayTime)}
+              | <a class="sublink" href="${clusterHref}">${statLabel}</a>
+            </div>
+          </div>
+        `;
+      }
+      html += renderPager(yearsParam ? { sort, years: yearsParam } : { sort }, page, hasPrev, hasNext);
+      contentEl.innerHTML = html;
+      highlightSortLink(sort);
+      if (topYearsEl) {
+        for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
+      }
+      if (footerMetaEl) footerMetaEl.textContent = `Topic clusters: ${fmtNum(total)}.`;
+      void 0 // statusEl.textContent = `Loaded ${fmtNum(pageRows.length)} rows (page ${page}).`;
+    }
+
+    async function renderCluster(componentId, page, sortKey = 'interesting', yearSet = new Set()) {
+      const sort = normalizeSort(sortKey);
+      const cid = Number(componentId);
+      const yearsParam = yearsParamFromSet(yearSet);
+      const rootRow = (topIndex.rows || []).find((r) => Number(r.component_id) === cid);
+      if (!rootRow) {
+        contentEl.innerHTML = `<div class="row">Cluster not found: <span class="mono">${esc(componentId)}</span></div>`;
+        void 0 // statusEl.textContent = 'Cluster not found.';
+        return;
+      }
+      const shardRec = shardRecForRank(rootRow.rank);
+      if (!shardRec) {
+        contentEl.innerHTML = `<div class="row">No shard found for cluster rank ${esc(rootRow.rank)}.</div>`;
+        void 0 // statusEl.textContent = 'Missing shard.';
+        return;
+      }
+
+      void 0 // statusEl.textContent = `Loading cluster ${cid} from shard ${shardRec.sid}...`;
+      if (loadingStatusEl) loadingStatusEl.textContent = `shard ${shardRec.sid}`;
+      const db = await loadShardBySid(shardRec.sid);
+      if (loadingStatusEl) loadingStatusEl.textContent = '';
+
+      let comp = null;
+      try {
+        comp = sqlOne(db, `
+          SELECT component_id, root_story_id, member_count, edge_count, rank_score, latest_time, story_points_sum, comment_count, root_title, root_by, root_time, root_score, root_url
+          FROM components
+          WHERE component_id=?
+          LIMIT 1
+        `, [cid]);
+      } catch {
+        // Backward compatibility with older related shards.
+        comp = sqlOne(db, `
+          SELECT component_id, root_story_id, member_count, edge_count, rank_score, latest_time, root_title, root_by, root_time, root_score
+          FROM components
+          WHERE component_id=?
+          LIMIT 1
+        `, [cid]);
+        if (comp) {
+          comp.story_points_sum = null;
+          comp.comment_count = null;
+          comp.root_url = null;
+        }
+      }
+      if (!comp) {
+        contentEl.innerHTML = `<div class="row">Cluster ${esc(componentId)} not present in shard ${esc(shardRec.sid)}.</div>`;
+        void 0 // statusEl.textContent = 'Cluster missing in shard.';
+        return;
+      }
+
+      // Load all members, then filter by year if needed.
+      let allMembers = [];
+      try {
+        allMembers = sqlAll(db, `
+          SELECT story_id, rel_score, title, by, time, score, url
+          FROM component_members
+          WHERE component_id=?
+          ORDER BY date(COALESCE(time,0), 'unixepoch') DESC, COALESCE(score,0) DESC, COALESCE(time,0) DESC, story_id DESC
+        `, [cid]);
+      } catch {
+        allMembers = sqlAll(db, `
+          SELECT story_id, rel_score, title, by, time, score
+          FROM component_members
+          WHERE component_id=?
+          ORDER BY date(COALESCE(time,0), 'unixepoch') DESC, COALESCE(score,0) DESC, COALESCE(time,0) DESC, story_id DESC
+        `, [cid]).map((r) => ({ ...r, url: null }));
+      }
+
+      // Filter by year if selected.
+      let filteredMembers = allMembers;
+      if (yearSet.size > 0) {
+        filteredMembers = allMembers.filter((m) => {
+          const y = yearFromTs(m.time);
+          return y != null && yearSet.has(y);
+        });
+      }
+
+      const total = filteredMembers.length;
+      const offset = (page - 1) * PAGE_SIZE;
+      const members = filteredMembers.slice(offset, offset + PAGE_SIZE);
+      const hasPrev = page > 1;
+      const hasNext = offset + PAGE_SIZE < total;
+      const backQs = new URLSearchParams({ sort });
+      if (yearsParam) backQs.set('years', yearsParam);
+      const backHref = `/?${backQs.toString()}`;
+
+      let html = `
+        ${renderViewExplainer('cluster', yearSet)}
+        <div class="row">
+          <div class="title"><a href="${backHref}">← back to backlinks</a></div>
+          <div class="hr"></div>
+          <div class="title"><b>${esc(comp.root_title || '[untitled]')}</b>${siteTailHtml(comp.root_url)}</div>
+          <div class="sub">
+            root story: <a href="${hnDiscussionUrl(comp.root_story_id)}" target="_blank" rel="noopener">${esc(comp.root_story_id)}</a>
+            (<a href="${storyUrl(comp.root_story_id)}">hackerbook</a>)
+            | by ${comp.root_by ? `<a href="${userUrl(comp.root_by)}">${esc(comp.root_by)}</a>` : '[unknown]'}
+            | ${fmtNum(comp.root_score)} points
+            | ${fmtTime(comp.root_time)}
+          </div>
+          <div class="sub">
+            ${yearSet.size > 0
+              ? `showing: ${fmtNum(total)} of ${fmtNum(comp.member_count)} discussions (filtered by ${[...yearSet].sort((a,b)=>b-a).join(', ')})`
+              : `members: ${fmtNum(comp.member_count)} discussions (${fmtNum(comp.comment_count)} comments) | links: ${fmtNum(comp.edge_count)}`}
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="hint">Timeline order: newest day first; within each day highest points first.${yearSet.size > 0 ? ' Year filter active.' : ''}</div>
+        <div class="timeline">
+      `;
+      let openDay = null;
+      members.forEach((m, i) => {
+        const rank = offset + i + 1;
+        const dKey = dayKey(m.time);
+        if (openDay !== dKey) {
+          if (openDay !== null) html += `</div></div>`;
+          openDay = dKey;
+          html += `
+            <div class="timeline-day">
+              <div class="timeline-day-label">${esc(fmtDayLabel(dKey))}</div>
+              <div class="timeline-items">
+          `;
+        }
+        html += `
+          <div class="timeline-item">
+            <div class="title"><span class="num">${rank}.</span><span class="titleline"><a href="${hnDiscussionUrl(m.story_id)}" target="_blank" rel="noopener">${esc(m.title || `[story ${m.story_id}]`)}</a>${siteTailHtml(m.url)}</span></div>
+            <div class="sub">
+              by ${m.by ? `<a href="${userUrl(m.by)}">${esc(m.by)}</a>` : '[unknown]'}
+              | ${fmtNum(m.score)} points
+              | ${fmtTime(m.time)}
+              | rel ${Number(m.rel_score || 0).toFixed(3)}
+              | <a href="${storyUrl(m.story_id)}">hackerbook</a>
+            </div>
+          </div>
+        `;
+      });
+      if (openDay !== null) html += `</div></div>`;
+      html += `</div>`;
+      html += renderPager({ cid: String(cid), sort }, page, hasPrev, hasNext);
+
+      contentEl.innerHTML = html;
+      highlightSortLink(sort);
+      if (topYearsEl) {
+        for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
+      }
+      if (footerMetaEl) footerMetaEl.textContent = `Topic clusters: ${fmtNum(applyYearFilter(topIndex.rows || [], yearSet).length)}.`;
+      void 0 // statusEl.textContent = `Loaded cluster ${cid}, showing ${members.length}/${fmtNum(total)} members.`;
+    }
+
+    function renderAbout(sort, yearSet) {
+      const yearsParam = yearsParamFromSet(yearSet);
+      const backQs = new URLSearchParams({ sort });
+      if (yearsParam) backQs.set('years', yearsParam);
+      const backHref = `/?${backQs.toString()}`;
+      contentEl.innerHTML = `
+        <div class="row">
+          <div class="title"><a href="${backHref}">&larr; BACK TO HN-TROPY</a></div>
+          <div class="hr"></div>
+        </div>
+        <div class="about">
+          <h3>How HN-TROPY Works</h3>
+          <p>Every HN comment is scanned for links to other HN stories. When a comment on Story&nbsp;A links to Story&nbsp;B, that&rsquo;s a <b>backlink</b> &mdash; evidence that the two discussions are related.</p>
+          <h4>Link extraction</h4>
+          <p>Regex patterns scan all comment text for <code>item?id=</code> references. Comments that say &ldquo;related:&rdquo; or &ldquo;past:&rdquo; get a keyword boost. Each comment can contribute up to 12 outbound links.</p>
+          <h4>Story resolution</h4>
+          <p>Comments live deep in reply chains. A recursive walk up the parent chain (up to 40 levels) maps each comment back to its root story, so the link is attributed to the right discussion.</p>
+          <h4>Similarity scoring</h4>
+          <p>Each story gets a token profile: title and text, lowercased, with stop-words removed. For every pair of linked stories, a <b>Jaccard similarity</b> score measures how much their tokens overlap. Edge weights combine source alignment (how similar the linking story is to its targets) with self-consistency (how similar the targets are to each other). Low-quality edges are pruned.</p>
+          <h4>Clustering</h4>
+          <p>A <b>union-find</b> algorithm groups stories into connected components. If Story&nbsp;A links to Story&nbsp;B, and Story&nbsp;B links to Story&nbsp;C, all three join the same cluster &mdash; a constellation of related discussions that can span years.</p>
+          <h4>Ranking</h4>
+          <p>Clusters are ranked by aggregate story points and comment volume. The top index is precomputed. Individual cluster data lives in gzip-compressed SQLite shards that load on demand.</p>
+          <h4>Everything runs in your browser</h4>
+          <p>The database is split into ~15&nbsp;MB SQLite shards. <b>sqlite3-wasm</b> (1&nbsp;MB) executes queries client-side via WebAssembly. There is no server-side search &mdash; just static files on a CDN.</p>
+        </div>
+      `;
+      if (footerMetaEl) footerMetaEl.textContent = 'About HN-TROPY.';
+    }
+
+    async function init() {
+      try {
+        sqlite3 = await window.sqlite3InitModule();
+        manifest = await fetchJsonMaybeGzip(PATHS.manifest);
+        topIndex = await fetchJsonMaybeGzip(PATHS.top);
+        loadSavedCustomRankExpression();
+        if (manifest && manifest.snapshot_time) {
+          snapshotEl.textContent = `snapshot ${fmtTime(manifest.snapshot_time)}`;
+        }
+        buildYearOptions(topIndex.rows || [], topIndex.backlinks || [], new Set());
+
+        const p = qs();
+        const page = Math.max(1, parseInt(p.get('p') || '1', 10));
+        const sort = normalizeSort(p.get('sort') || 'interesting');
+        const yearSet = parseYearsParam(p.get('years') || '');
+        if (topYearsEl) {
+          for (const opt of topYearsEl.options) opt.selected = yearSet.has(Number(opt.value));
+        }
+        highlightSortLink(sort);
+        document.querySelectorAll('.sort-link').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const next = normalizeSort(link.dataset.sort);
+            if (next === 'custom_ranked') {
+              if (!promptForCustomRankExpression()) return;
+            }
+            const years = yearsParamFromSet(selectedYearsFromControl());
+            const q = new URLSearchParams(location.search);
+            q.set('sort', next);
+            if (years) q.set('years', years); else q.delete('years');
+            q.set('p', '1');
+            q.delete('cid');
+            q.delete('pair');
+            location.search = q.toString();
+          });
+        });
+        if (topYearsEl) {
+          let initialYearsParam = yearsParamFromSet(yearSet);
+          topYearsEl.addEventListener('mousedown', (e) => {
+            if (topYearsEl.size <= 1) {
+              e.preventDefault();
+              setYearsMenuOpen(true);
+              topYearsEl.focus();
+            }
+          });
+          topYearsEl.addEventListener('focus', () => setYearsMenuOpen(true));
+          topYearsEl.addEventListener('blur', () => {
+            setYearsMenuOpen(false);
+            // Auto-apply on blur if selection changed.
+            const newYears = yearsParamFromSet(selectedYearsFromControl());
+            if (newYears !== initialYearsParam) {
+              const q = new URLSearchParams(location.search);
+              if (newYears) q.set('years', newYears); else q.delete('years');
+              q.set('p', '1');
+              q.delete('cid');
+              q.delete('pair');
+              location.search = q.toString();
+            }
+          });
+          topYearsEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+              setYearsMenuOpen(false);
+              topYearsEl.blur();
+            }
+          });
+        }
+        if (topYearsClearEl) {
+          topYearsClearEl.addEventListener('click', () => {
+            // Clear all year selections.
+            if (topYearsEl) {
+              for (const opt of topYearsEl.options) opt.selected = false;
+            }
+            const q = new URLSearchParams(location.search);
+            q.delete('years');
+            q.set('p', '1');
+            q.delete('cid');
+            q.delete('pair');
+            location.search = q.toString();
+          });
+        }
+        const cid = p.get('cid');
+        const pair = p.get('pair');
+        if (p.has('about')) {
+          renderAbout(sort, yearSet);
+        } else if (pair) {
+          await renderInterestingEvidence(pair, page, yearSet);
+        } else if (cid) {
+          await renderCluster(cid, page, sort, yearSet);
+        } else {
+          await renderTopList(page, sort, yearSet);
+        }
+        document.body.classList.remove('loading');
+      } catch (err) {
+        document.body.classList.remove('loading');
+        contentEl.innerHTML = `<div class="row mono">${esc(err && err.message ? err.message : String(err))}</div>`;
+      }
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

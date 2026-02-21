@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support HackerBook</title>
+  <link rel="icon" type="image/png" href="cd.png?v=20251230">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f6f6ef;
+      font-family: Verdana, Geneva, sans-serif;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 24px;
+      color: #000;
+      margin-bottom: 10px;
+    }
+    p {
+      font-size: 14px;
+      color: #828282;
+      max-width: 500px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Support HackerBook</h1>
+    <p>Help keep this project alive and support future development.</p>
+    <script async src="https://js.stripe.com/v3/buy-button.js"></script>
+    <stripe-buy-button
+      buy-button-id="buy_btn_1SnAQwBKxtsqOlorAENKtiKY"
+      publishable-key="pk_live_519b8xgBKxtsqOloreQVhWpxIYVYN4FGyf60PLrQUHPGCFxW42ovujJ9n1qzduTAE06uOvHwshX7Gd7P4S3kk5APM00v8ZFDc73"
+    >
+    </stripe-buy-button>
+  </div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "static-news",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "The unkillable, offline Hacker News archive running entirely in the browser.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DOSAYGO-STUDIO/HackerBook.git"
+  },
+  "author": "DOSAYGO-STUDIO",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "etl": "node etl-hn.cjs --gzip",
+    "build-related": "node ./toool/s/build-related-index.mjs --gzip --target-mb 15 --out-dir docs-related/static-related-shards --out-manifest docs-related/static-related-manifest.json --top-index docs-related/related-top.json",
+    "sync-docs": "cp docs/static.html docs/index.html",
+    "serve": "node serve-dev.cjs",
+    "serve-related": "DOCS_DIR=docs-related node serve-dev.cjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "latest"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.34.0"
+  }
+}
