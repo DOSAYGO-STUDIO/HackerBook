@@ -227,7 +227,7 @@ The user stats generation (`toool/s/build-user-stats.mjs`) is a high-performance
 - **`static-manifest.json`**: The core routing map. It maps ranges of Item IDs (`id_lo` to `id_hi`) to specific shard files. The client uses this to perform binary searches when looking up a specific ID (e.g., `?id=123`). It is generated during the initial ETL sharding process.
 - **`archive-index.json`**: A secondary map optimized for time-based access. It maps "effective" time ranges (`tmin_eff` to `tmax_eff`) to shards, filtering out data outliers. It also caches item counts (posts vs comments) to allow the UI to display daily statistics without opening every shard.
 - **`static-user-stats-manifest.json`**: The directory for user data. It maps alphabetical ranges of usernames (e.g., "a" to "az") to specific user-stats shards, enabling fast lookups for the "Me" view.
-- **`cross-shard-index.bin`**: A compact binary index (not JSON) that maps `parent_id` to a list of `shard_id`s. This solves the "scattered conversation" problem: if a story is in Shard A, but comments are added months later in Shard B and C, this index tells the client exactly which shards to fetch to load the full thread.
+- **`cross-shard-index.bin`**: A compact binary index (not JSON) that maps `parent_id` to a list of `shard_id`s. This solves the "scattered conversation" problem: if a story is in Shard A, but comments are added days later in Shard B and C, this index tells the client exactly which shards to fetch to load the full thread.
 
 ### Cross-shard index binary layout
 The `cross-shard-index.bin` file uses a custom binary format for compactness (CSR-style):
