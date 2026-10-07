@@ -398,3 +398,10 @@ Yes. Any static host works (Cloudflare Pages, S3, GitHub Pages, nginx, etc.).
 - HN content remains property of Y Combinator and the respective authors.
 - Roadmap: speed up user stats build (issue #3: https://github.com/DOSAYGO-STUDIO/HackerBook/issues/3).
 - `_headers` sets long-cache + `immutable` for hashed shards and gz assets; manifests are cache-busted via HTML version strings.
+
+## More from DOSAYGO STUDIO
+
+- [Less Talk](https://dosaygo-studio.github.io/less-talk/): an original big-beat homage in Web Audio, one HTML file, everything synthesized
+- [prime-news](https://dosaygo-studio.github.io/prime-news/): Hacker News, prime-numbered items only
+- [HN front page 2035](https://dosaygo-studio.github.io/hn-front-page-2035/)
+- [rain](https://dosaygo-studio.github.io/rain/): a fast hash function in under 140 lines
