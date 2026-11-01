@@ -26,7 +26,7 @@ jobs:
           node-version: "22"
       - name: Test decision rules
         run: |
-          node --test tests/promotion.test.mjs tests/deploy.test.mjs > /tmp/hackerbook-review-tests.log 2>&1
+          node --test tests/promotion.test.mjs tests/deploy.test.mjs tests/heartbeat.test.mjs > /tmp/hackerbook-review-tests.log 2>&1
           cat /tmp/hackerbook-review-tests.log
       - name: Verify live deployment
         run: node tools/verify-live.mjs
@@ -43,3 +43,29 @@ jobs:
             live-verification.json
             /tmp/hackerbook-review-tests.log
           retention-days: 90
+
+  scheduler-activity:
+    needs: review
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    # Separate from the analytics job: no Cloudflare credentials in this job.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Preserve scheduled review eligibility with monthly repository activity
+        run: |
+          node tools/promotion-heartbeat.mjs
+          git add .github/promotion-review-heartbeat.json
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Record monthly promotion scheduler activity [skip ci]'
+            git push origin HEAD:main
+          fi

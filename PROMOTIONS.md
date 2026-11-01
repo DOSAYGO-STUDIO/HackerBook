@@ -73,6 +73,18 @@ and review artifacts are retained for 90 days. Reports state when no conclusion
 is justified. The scheduled workflow is the persistent follow-up mechanism;
 it does not depend on this chat or a local machine remaining open.
 
+GitHub disables scheduled workflows in public repositories after 60 days without
+repository activity. A separate job records a timestamp-only heartbeat at most
+once every 28 days, including when a review fails, so failures remain observable
+instead of eventually disabling the scheduler. This job has repository write
+permission but no Cloudflare credentials; the review job remains read-only on
+GitHub. The heartbeat contains no traffic or sales data and does not claim that
+a review succeeded. Its built-in `GITHUB_TOKEN` push does not trigger CI, GitHub
+Pages, or another full rebake. Normal pushes only, never forced updates.
+
+References: [GitHub inactivity policy](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows)
+and [GITHUB_TOKEN event behavior](https://docs.github.com/en/actions/concepts/security/github_token).
+
 ## Change and rollback
 
 Configuration is the `campaign-v1` key in the `PROMO_CONFIG` namespace declared
