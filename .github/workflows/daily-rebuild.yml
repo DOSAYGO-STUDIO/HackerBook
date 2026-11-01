@@ -1,4 +1,4 @@
-name: Weekly Rebuild
+name: Archive rebuild (manual only)
 
 on:
   # Full rebakes are explicitly dispatched. Promotion reviews have their own schedule.

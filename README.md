@@ -1,10 +1,10 @@
-# Hacker Book - The unkillable, offline Hacker News archive, updated Weekly.
+# Hacker Book - The unkillable, offline Hacker News archive.
 
-**[Support HackerBook to make it update daily](https://hackerbook.dosaygo.com/support.html)** Current update cadence: weekly
+**[Support HackerBook](https://hackerbook.dosaygo.com/support.html)** Archive snapshots are rebuilt manually, with no recurring rebuild schedule.
 
-![CI](https://github.com/DOSAYGO-STUDIO/HackerBook/actions/workflows/ci.yml/badge.svg) ![License](https://img.shields.io/github/license/DOSAYGO-STUDIO/HackerBook) ![Stars](https://img.shields.io/github/stars/DOSAYGO-STUDIO/HackerBook?style=flat) ![Archive size](https://img.shields.io/badge/archive-~9GB%20gz-blue) [![Show HN](https://img.shields.io/badge/Show%20HN-22GB%20SQLite-orange)](https://news.ycombinator.com/item?id=42550993) [![Archive size](https://img.shields.io/badge/auto-updates%20weekly-dfff00)](https://github.com/DOSAYGO-STUDIO/HackerBook/actions/workflows/daily-rebuild.yml)
+![CI](https://github.com/DOSAYGO-STUDIO/HackerBook/actions/workflows/ci.yml/badge.svg) ![License](https://img.shields.io/github/license/DOSAYGO-STUDIO/HackerBook) ![Stars](https://img.shields.io/github/stars/DOSAYGO-STUDIO/HackerBook?style=flat) ![Archive size](https://img.shields.io/badge/archive-~9GB%20gz-blue) [![Show HN](https://img.shields.io/badge/Show%20HN-22GB%20SQLite-orange)](https://news.ycombinator.com/item?id=42550993) [![Manual archive rebuild](https://img.shields.io/badge/rebuild-manual-dfff00)](https://github.com/DOSAYGO-STUDIO/HackerBook/actions/workflows/daily-rebuild.yml)
 
-did you miss hacker news for a day because you were occupied with something useful like work or you just didn't touch the Internet for sanity or purity? Well now you can go back to the days of hacker news that you missed and see what you missed using our weekly updated archive. updates come in around every Sunday. 
+did you miss hacker news for a day because you were occupied with something useful like work or you just didn't touch the Internet for sanity or purity? Well now you can go back to the days of hacker news preserved in this archive and see what you missed. Product promotions are reviewed separately; changing their copy or rotation does not require rebuilding the archive.
 
 https://hackerbook.dosaygo.com
 
