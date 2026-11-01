@@ -2,6 +2,10 @@
 *.log
 node_modules/.cache/
 node_modules/
+.wrangler/
+promotion-review.json
+promotion-review.md
+live-verification.json
 data/
 docs/static-shards
 docs/static-shards/

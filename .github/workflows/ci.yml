@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install
@@ -35,3 +35,16 @@ jobs:
 
       - name: Repo sanity checks
         run: bash toool/s/ci-verify.sh
+
+      - name: Unit, Workers runtime and headless browser tests
+        run: |
+          npm test > /tmp/hackerbook-ci-tests.log 2>&1
+          cat /tmp/hackerbook-ci-tests.log
+
+      - name: Preserve full test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-test-output
+          path: /tmp/hackerbook-ci-tests.log
+          retention-days: 14

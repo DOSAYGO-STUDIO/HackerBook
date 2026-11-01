@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "include": ["/", "/index", "/index.html", "/static", "/static.html", "/mobile", "/mobile.html", "/_promotion/event"],
+  "exclude": []
+}

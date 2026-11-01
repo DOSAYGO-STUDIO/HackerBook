@@ -1,0 +1,15 @@
+.house-promotion { padding: 9px 12px; border-bottom: 1px solid #deded4; font: 12px/1.4 Verdana, sans-serif; color: #45453e; }
+.house-label { font-size: 10px; color: #666; margin-bottom: 5px; }
+.house-products { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.house-product { flex: 1 1 200px; min-width: 0; }
+.house-product a { color: #654218; text-decoration: underline; text-underline-offset: 2px; }
+.house-product a:visited { color: #654218; }
+.house-product span { display: block; margin-top: 3px; }
+.house-featured a { font-weight: bold; }
+.house-promotion:empty { display: none; }
+@media (max-width: 600px) {
+  .house-promotion { padding: 8px; }
+  .house-products { gap: 7px; }
+  .house-product { flex-basis: 100%; }
+  .house-product span { display: inline; margin-left: 5px; }
+}

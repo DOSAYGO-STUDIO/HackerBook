@@ -1,44 +1,52 @@
 name: Weekly Rebuild
 
 on:
-  # Run weekly on Mondays at 2:00 AM UTC
-  schedule:
-    - cron: '0 2 * * 1'
-  # Allow manual trigger
+  # Full rebakes are explicitly dispatched. Promotion reviews have their own schedule.
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hackerbook-production-deployment
+  cancel-in-progress: false
 
 jobs:
   rebuild:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 360  # 6 hours max
-
+    timeout-minutes: 360
+    env:
+      CLOUDFLARE_ACCOUNT_ID: f7a23b970ca2ba7eb09fcab1c9a39eee
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PUPPETEER_SKIP_DOWNLOAD: "true"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-
+          node-version: "22"
+          cache: npm
       - name: Install dependencies
         run: npm ci
-
-      - name: Run daily rebuild
+      - name: Verify deployment access before archive work
+        run: npm run deploy-preflight
+      - name: Promotion and deployment regression tests
+        run: |
+          node --test tests/promotion.test.mjs tests/deploy.test.mjs > /tmp/hackerbook-tests.log 2>&1
+          cat /tmp/hackerbook-tests.log
+      - name: Full archive rebuild and production deployment
         env:
           AUTO_RUN: "1"
           GCLOUD_SERVICE_ACCOUNT_KEY: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          yes y | bash ./toool/s/predeploy-checks.sh --auto-resume
-
-      - name: Upload artifacts on failure
-        if: failure()
+        # AUTO_RUN already supplies confirmations. A `yes` pipe can fail with SIGPIPE.
+        run: bash ./toool/s/predeploy-checks.sh --regular-build
+      - name: Verify published promotion and archive assets
+        run: node tools/verify-live.mjs
+      - name: Preserve deployment evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rebuild-logs-${{ github.run_number }}
+          name: rebuild-evidence-${{ github.run_number }}
           path: |
-            docs/
-            data/
-          retention-days: 7
+            /tmp/hackerbook-tests.log
+            live-verification.json
+          retention-days: 30

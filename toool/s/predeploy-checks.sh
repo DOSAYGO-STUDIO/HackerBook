@@ -8,6 +8,7 @@ shopt -s nullglob
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DOCS_DIR="${REPO_DIR}/docs"
+export PATH="${REPO_DIR}/node_modules/.bin:${PATH}"
 RELATED_DOCS_DIR="${REPO_DIR}/docs-related"
 RAW_DIR_PRIMARY="${REPO_DIR}/data/raw"
 RAW_DIR_ALT="${REPO_DIR}/toool/data/raw"
@@ -309,35 +310,16 @@ ensure_wrangler() {
 }
 
 ensure_wrangler_auth() {
-  if ! command -v wrangler >/dev/null 2>&1; then
-    return 1
-  fi
-
-  # Check for API token in environment (for CI)
   if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
-    # Wrangler automatically uses CLOUDFLARE_API_TOKEN from environment
-    # Verify it works by checking whoami
-    if wrangler whoami >/dev/null 2>&1; then
-      pass "wrangler auth OK via CLOUDFLARE_API_TOKEN"
-      return 0
-    else
-      warn "CLOUDFLARE_API_TOKEN set but authentication failed"
-    fi
+    node "${REPO_DIR}/tools/deploy-preflight.mjs"
+    return $?
   fi
-
-  # Check if already authenticated
-  if wrangler whoami >/dev/null 2>&1; then
-    pass "wrangler auth OK"
-    return 0
+  if [[ -n "${CI:-}" || -n "${AUTO_RUN:-}" ]]; then
+    fail "Unattended deployment requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID"
   fi
-
-  # Interactive login
-  warn "wrangler not authenticated"
+  if wrangler whoami; then return 0; fi
   confirm_step "Run 'wrangler login' now?" wrangler login
-  if ! wrangler whoami >/dev/null 2>&1; then
-    fail "wrangler auth still missing"
-  fi
-  pass "wrangler auth OK"
+  wrangler whoami
 }
 
 require_file() {
@@ -599,6 +581,10 @@ if ensure_wrangler; then
   pass "wrangler available"
 else
   warn "wrangler not available; deploy step will be skipped"
+fi
+
+if [[ -n "${CI:-}" || -n "${AUTO_RUN:-}" ]]; then
+  ensure_wrangler_auth || fail "Deployment preflight failed; archive build was not started"
 fi
 
 step "Checking raw data"
@@ -995,7 +981,7 @@ confirm_step "Check DNS now? (${CUSTOM_DOMAIN} → ${EXPECTED_CNAME})" check_cna
 if command -v wrangler >/dev/null 2>&1 && ensure_wrangler_auth; then
   confirm_step "Deploy now? (wrangler pages deploy)" in_repo wrangler pages deploy docs --project-name "${PAGES_PROJECT_NAME}" --commit-dirty=true
 else
-  warn "wrangler not available or not authenticated; skipping deploy step"
+  fail "Deployment unavailable: wrangler missing or authentication failed"
 fi
 
 log ""

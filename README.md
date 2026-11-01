@@ -73,7 +73,7 @@ Inspired by HN Made of Primes, this is the "year-end gift" to the community: kee
 ![Me view](docs/assets/hn-me.png)
 
 ## Prerequisites
-- **Node.js 20+** (Required for tools and ETL)
+- **Node.js 22+** (Required for tools and ETL)
 - **Google Cloud SDK** (Required if using `download_hn.sh` to fetch raw data)
 - **Disk Space**: ~45GB free (If running the full archivist workflow: 22GB raw + staging + shards)
 
@@ -306,6 +306,12 @@ WHERE deleted IS NULL OR deleted = false
 - The manifest records a **snapshot time** (latest item time in the dump).
 - The UI normalizes to the snapshot **day end** (23:59:59) so the "front page" is always the final day of the dump.
 - Cache-busting is applied to manifests and indexes; shards are immutable by hash.
+
+## Product promotions
+
+See [PROMOTIONS.md](PROMOTIONS.md) for country targeting, measurement, weekly
+autonomous copy review, deployment checks, and rollback. Copy selection changes
+do not require an archive rebake. Full rebakes are currently manual-only.
 
 ## Deploy checklist
 - `static-manifest.json(.gz)` updated and points to hashed shards.

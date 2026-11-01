@@ -1,0 +1,17 @@
+{
+  "name": "static-news",
+  "pages_build_output_dir": "docs",
+  "compatibility_date": "2026-10-01",
+  "kv_namespaces": [
+    {
+      "binding": "PROMO_CONFIG",
+      "id": "ac513f828bb1456c8d5065b786f3d44b"
+    }
+  ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "PROMO_EVENTS",
+      "dataset": "hackerbook_promotions"
+    }
+  ]
+}

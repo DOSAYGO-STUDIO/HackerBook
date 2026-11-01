@@ -10,19 +10,26 @@
   "author": "DOSAYGO-STUDIO",
   "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "etl": "node etl-hn.cjs --gzip",
     "build-related": "node ./toool/s/build-related-index.mjs --gzip --target-mb 15 --out-dir docs-related/static-related-shards --out-manifest docs-related/static-related-manifest.json --top-index docs-related/related-top.json",
     "sync-docs": "cp docs/static.html docs/index.html",
     "serve": "node serve-dev.cjs",
-    "serve-related": "DOCS_DIR=docs-related node serve-dev.cjs"
+    "serve-related": "DOCS_DIR=docs-related node serve-dev.cjs",
+    "test": "node --test tests/*.test.mjs",
+    "test-browser": "node --test tests/browser.test.mjs",
+    "deploy-preflight": "node tools/deploy-preflight.mjs",
+    "review-promotions": "node tools/review-promotions.mjs"
   },
   "dependencies": {
     "better-sqlite3": "latest"
   },
   "devDependencies": {
-    "puppeteer": "^24.34.0"
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261023.3-beta",
+    "puppeteer": "^24.34.0",
+    "wrangler": "4.156.0"
   }
 }

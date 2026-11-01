@@ -1,0 +1,45 @@
+name: Review product promotions
+
+on:
+  schedule:
+    - cron: '17 13 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hackerbook-promotion-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: f7a23b970ca2ba7eb09fcab1c9a39eee
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test decision rules
+        run: |
+          node --test tests/promotion.test.mjs tests/deploy.test.mjs > /tmp/hackerbook-review-tests.log 2>&1
+          cat /tmp/hackerbook-review-tests.log
+      - name: Verify live deployment
+        run: node tools/verify-live.mjs
+      - name: Review qualified traffic and apply supported changes
+        run: node tools/review-promotions.mjs --apply
+      - name: Preserve review and rollback evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-review-${{ github.run_number }}
+          path: |
+            promotion-review.json
+            promotion-review.md
+            live-verification.json
+            /tmp/hackerbook-review-tests.log
+          retention-days: 90
